@@ -30,7 +30,7 @@ public class DamageIOModClient implements ClientModInitializer {
 	public void onInitializeClient() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             dispatcher.register(CommandManager.literal("serial")
-                .then(CommandManager.literal("set")
+                .then(CommandManager.literal("open")
                     .then(CommandManager.argument("port", StringArgumentType.string())
                         .suggests(new PortSuggestionProvider())
                         .executes(ctx -> {
@@ -48,8 +48,13 @@ public class DamageIOModClient implements ClientModInitializer {
                 .then(CommandManager.literal("send")
                     .then(CommandManager.argument("value", IntegerArgumentType.integer(0, 255))
                         .executes(ctx -> {
+                            if (writer == null) {
+                                ctx.getSource().sendError(Text.literal("Serial port is not open. Use /serial set <port> first."));
+                                return 0;
+                            }
+
                             int value = IntegerArgumentType.getInteger(ctx, "value");
-                            sendToSerial(value);
+                            new BlinkMessage(value).sendToSerial(writer);
                             ctx.getSource().sendFeedback(() -> Text.literal("Sent value: " + value), false);
                             return 1;
                         })
@@ -127,8 +132,35 @@ public class DamageIOModClient implements ClientModInitializer {
         }
     }
 
-    private static void sendToSerial(int value) {
-        if (writer != null) {
+    interface Message {
+        void sendToSerial(PrintWriter writer);
+    }
+
+    class BlinkMessage implements Message {
+        private final int value;
+
+        public BlinkMessage(int value) {
+            this.value = value;
+        }
+
+        @Override
+        public void sendToSerial(PrintWriter writer) {
+            writer.write('B');
+            writer.write(value & 0xFF);
+            writer.flush();
+        }
+    }
+
+    class DamageMessage implements Message {
+        private final int value;
+
+        public DamageMessage(int value) {
+            this.value = value;
+        }
+
+        @Override
+        public void sendToSerial(PrintWriter writer) {
+            writer.write('D');
             writer.write(value & 0xFF);
             writer.flush();
         }
