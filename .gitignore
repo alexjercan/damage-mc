@@ -38,3 +38,9 @@ hs_err_*.log
 replay_*.log
 *.hprof
 *.jfr
+
+# Arduino stuff
+compile_flags.txt
+main.hex
+main.elf
+main.o

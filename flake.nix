@@ -43,6 +43,9 @@
           libGL
           openal
           alsa-lib
+
+          pkgsCross.avr.buildPackages.gcc
+          pkgsCross.avr.buildPackages.avrdude
         ];
 
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
