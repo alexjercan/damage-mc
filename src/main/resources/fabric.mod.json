@@ -1,31 +1,31 @@
 {
 	"schemaVersion": 1,
-	"id": "modid",
+	"id": "damageio",
 	"version": "${version}",
-	"name": "Example mod",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"name": "Damage IO",
+	"description": "This is a simple mod that writes to a serial port the damage you take.",
 	"authors": [
 		"Me!"
 	],
 	"contact": {
 		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"sources": "https://github.com/alexjercan/damage-io"
 	},
 	"license": "CC0-1.0",
-	"icon": "assets/modid/icon.png",
+	"icon": "assets/damageio/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.example.ExampleMod"
+			"com.damageio.DamageIOMod"
 		],
 		"client": [
-			"com.example.ExampleModClient"
+			"com.damageio.DamageIOModClient"
 		]
 	},
 	"mixins": [
-		"modid.mixins.json",
+		"damageio.mixins.json",
 		{
-			"config": "modid.client.mixins.json",
+			"config": "damageio.client.mixins.json",
 			"environment": "client"
 		}
 	],
