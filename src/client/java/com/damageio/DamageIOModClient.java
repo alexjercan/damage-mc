@@ -1,20 +1,23 @@
 package com.damageio;
 
-import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.suggestion.SuggestionProvider;
-import com.mojang.brigadier.arguments.StringArgumentType;
+import com.fazecast.jSerialComm.SerialPort;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import java.io.PrintWriter;
+import java.util.concurrent.CompletableFuture;
 import net.fabricmc.api.ClientModInitializer;
-import com.fazecast.jSerialComm.SerialPort;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
-import java.io.PrintWriter;
-import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,6 +28,7 @@ public class DamageIOModClient implements ClientModInitializer {
 
     private static SerialPort port;
     private static PrintWriter writer;
+    private float lastHealth = -1.0f;
 
 	@Override
 	public void onInitializeClient() {
@@ -68,6 +72,23 @@ public class DamageIOModClient implements ClientModInitializer {
                     })
                 )
             );
+        });
+
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (writer == null) return;
+
+            PlayerEntity player = MinecraftClient.getInstance().player;
+            if (player == null) return;
+
+            float currentHealth = player.getHealth();
+
+            if (lastHealth != -1.0f && currentHealth < lastHealth) {
+                float damage = lastHealth - currentHealth;
+                new DamageMessage((int) damage).sendToSerial(writer);
+                LOGGER.info("Player took damage: " + damage);
+            }
+
+            lastHealth = currentHealth;
         });
 
         LOGGER.info("Using Library Version v" + SerialPort.getVersion());

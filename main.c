@@ -1,4 +1,3 @@
-#define DELAY_MS 100.0
 #define F_CPU 16000000UL
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -18,8 +17,13 @@ typedef struct {
 #define BAUD 9600
 #define MY_UBRR F_CPU/16/BAUD-1
 
-volatile uint16_t blink_delay = 500;
-volatile uint16_t counter = 0;
+volatile uint16_t blink_counter = 0;
+volatile const uint16_t blink_delay = 500;
+
+volatile uint16_t damage_counter = 0;
+volatile uint16_t damage_delay = 100;
+volatile uint8_t damage_active = 0;
+volatile int damage_steps = 0;
 
 void uart_init(void) {
     unsigned int ubrr = MY_UBRR;
@@ -46,10 +50,23 @@ void uart_read_message(message_t *msg) {
 }
 
 ISR(TIMER1_COMPA_vect) {
-    counter++;
-    if (counter >= blink_delay) {
+    blink_counter++;
+    if (blink_counter >= blink_delay) {
         PORTB ^= (1 << PB5);
-        counter = 0;
+        blink_counter = 0;
+    }
+
+    if (damage_active) {
+        damage_counter++;
+        if (damage_counter >= damage_delay) {
+            PORTB ^= (1 << PB4);
+            damage_counter = 0;
+            damage_steps--;
+            if (damage_steps <= 0) {
+                damage_active = 0;
+                PORTB &= ~(1 << PB4);
+            }
+        }
     }
 }
 
@@ -62,7 +79,7 @@ void timer1_init(void) {
 }
 
 int main(void) {
-    DDRB |= (1 << PB5);
+    DDRB |= (1 << PB5) | (1 << PB4);
     uart_init();
     timer1_init();
 
@@ -72,10 +89,12 @@ int main(void) {
             uart_read_message(&msg);
             if (msg.type == 'B') {
                 if (msg.blink_value == 0) msg.blink_value = 1;
-                blink_delay = msg.blink_value * 100;
+                damage_delay = msg.blink_value;
             } else if (msg.type == 'D') {
-                // Handle damage value if needed
-                // For example, you could log it or take some action
+                if (msg.damage_value == 0) msg.damage_value = 1;
+                damage_steps += msg.damage_value * 2;
+                damage_counter = 0;
+                damage_active = 1;
             } else {
                 // Handle unknown message type if needed
             }
