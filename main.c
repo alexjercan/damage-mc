@@ -64,6 +64,7 @@ ISR(TIMER1_COMPA_vect) {
             damage_steps--;
             if (damage_steps <= 0) {
                 damage_active = 0;
+                damage_steps = 0;
                 PORTB &= ~(1 << PB4);
             }
         }
@@ -93,7 +94,6 @@ int main(void) {
             } else if (msg.type == 'D') {
                 if (msg.damage_value == 0) msg.damage_value = 1;
                 damage_steps += msg.damage_value * 2;
-                damage_counter = 0;
                 damage_active = 1;
             } else {
                 // Handle unknown message type if needed

@@ -22,7 +22,7 @@
       };
     in {
       packages = {
-          default = {}; # TODO: Add package here
+        default = {}; # TODO: Add package here
       };
 
       apps = {
