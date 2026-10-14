@@ -46,7 +46,7 @@ public class DamageIOModClient implements ClientModInitializer {
                             return 0;
                         })))
                 .then(ClientCommandManager.literal("pulse")
-                    .then(ClientCommandManager.argument("milliseconds", IntegerArgumentType.integer(1, 255))
+                    .then(ClientCommandManager.argument("milliseconds", IntegerArgumentType.integer(1))
                         .executes(context -> {
                             if (output == null) {
                                 context.getSource().sendFeedback(Text.literal("Open a port with /damageio open <port> first."));

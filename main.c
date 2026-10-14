@@ -1,15 +1,16 @@
 #define F_CPU 16000000UL
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include <util/atomic.h>
 
 // Message types:
-// * B -> damage-output toggle interval in milliseconds (one binary byte, 1-255)
+// * B -> damage-output toggle interval in milliseconds (four bytes, little-endian, 1-INT32_MAX)
 // * D -> damage in health points (one binary byte, 1-255)
 // * U -> unknown message type
 typedef struct {
     char type;
     union {
-        uint8_t blink_value;
+        uint32_t pulse_ms;
         uint8_t damage_value;
     };
 } message_t;
@@ -17,11 +18,8 @@ typedef struct {
 #define BAUD 9600
 #define MY_UBRR F_CPU/16/BAUD-1
 
-volatile uint16_t blink_counter = 0;
-volatile const uint16_t blink_delay = 500;
-
-volatile uint16_t damage_counter = 0;
-volatile uint16_t damage_delay = 100;
+volatile uint32_t damage_counter = 0;
+volatile uint32_t damage_delay = 100;
 volatile uint8_t damage_active = 0;
 volatile int damage_steps = 0;
 
@@ -41,7 +39,11 @@ uint8_t uart_read(void) {
 void uart_read_message(message_t *msg) {
     msg->type = uart_read();
     if (msg->type == 'B') {
-        msg->blink_value = uart_read();
+        uint32_t b0 = uart_read();
+        uint32_t b1 = uart_read();
+        uint32_t b2 = uart_read();
+        uint32_t b3 = uart_read();
+        msg->pulse_ms = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
     } else if (msg->type == 'D') {
         msg->damage_value = uart_read();
     } else {
@@ -50,22 +52,16 @@ void uart_read_message(message_t *msg) {
 }
 
 ISR(TIMER1_COMPA_vect) {
-    blink_counter++;
-    if (blink_counter >= blink_delay) {
-        PORTB ^= (1 << PB5);
-        blink_counter = 0;
-    }
-
     if (damage_active) {
         damage_counter++;
         if (damage_counter >= damage_delay) {
-            PORTB ^= (1 << PB4);
+            PORTB ^= (1 << PB5);
             damage_counter = 0;
             damage_steps--;
             if (damage_steps <= 0) {
                 damage_active = 0;
                 damage_steps = 0;
-                PORTB &= ~(1 << PB4);
+                PORTB &= ~(1 << PB5);
             }
         }
     }
@@ -80,7 +76,9 @@ void timer1_init(void) {
 }
 
 int main(void) {
-    DDRB |= (1 << PB5) | (1 << PB4);
+    // ATmega328P Arduino Uno/Nano onboard LED is on PB5 (digital pin 13).
+    // Leave PB4 as an input; use the onboard LED for damage pulses only.
+    DDRB |= (1 << PB5);
     uart_init();
     timer1_init();
 
@@ -89,8 +87,12 @@ int main(void) {
             message_t msg = {0};
             uart_read_message(&msg);
             if (msg.type == 'B') {
-                if (msg.blink_value == 0) msg.blink_value = 1;
-                damage_delay = msg.blink_value;
+                if (msg.pulse_ms >= 1 && msg.pulse_ms <= INT32_MAX) {
+                    // The 32-bit delay is shared with the timer ISR on an 8-bit MCU.
+                    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+                        damage_delay = msg.pulse_ms;
+                    }
+                }
             } else if (msg.type == 'D') {
                 if (msg.damage_value == 0) msg.damage_value = 1;
                 damage_steps += msg.damage_value * 2;

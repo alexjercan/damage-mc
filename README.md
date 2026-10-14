@@ -24,7 +24,10 @@ when connected to a server; other players do not control your serial port.
 /damageio close
 ```
 
-`pulse` sets the time between damage-output toggles in milliseconds (1-255).
+`pulse` sets the time between damage-output toggles in milliseconds (1-2147483647).
+On the wire, a pulse command is `B` followed by four little-endian bytes; damage
+commands remain `D` followed by one byte. Update the mod and firmware together:
+older firmware expects a one-byte pulse value.
 The mod jar includes jSerialComm. Install Fabric API alongside it. For a real
 installation, use `damageio-<version>.jar` from a GitHub Release (not the
 sources jar). Releases also include `damageio-atmega328p-<version>.hex` for the

@@ -10,13 +10,18 @@ import org.junit.jupiter.api.Test;
 
 class SerialProtocolTest {
     @Test
-    void pulseUsesBinaryMilliseconds() throws IOException {
+    void pulseUsesFourLittleEndianBytes() throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         SerialProtocol.writePulse(output, 5);
-        SerialProtocol.writePulse(output, 255);
-        assertArrayEquals(new byte[] {'B', 5, 'B', (byte) 255}, output.toByteArray());
+        SerialProtocol.writePulse(output, 0x12345678);
+        SerialProtocol.writePulse(output, Integer.MAX_VALUE);
+        assertArrayEquals(new byte[] {
+            'B', 5, 0, 0, 0,
+            'B', 0x78, 0x56, 0x34, 0x12,
+            'B', (byte) 0xff, (byte) 0xff, (byte) 0xff, 0x7f
+        }, output.toByteArray());
         assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writePulse(output, 0));
-        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writePulse(output, 256));
+        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writePulse(output, -1));
     }
 
     @Test

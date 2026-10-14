@@ -3,12 +3,20 @@ package com.damageio;
 import java.io.IOException;
 import java.io.OutputStream;
 
-/** Two-byte frames consumed by the ATmega328P firmware. */
+/** B has a four-byte little-endian value; D has a one-byte value. */
 public final class SerialProtocol {
     private SerialProtocol() {}
 
     public static void writePulse(OutputStream output, int milliseconds) throws IOException {
-        writeFrame(output, 'B', milliseconds);
+        if (milliseconds < 1) throw new IllegalArgumentException("Pulse interval must be positive");
+        output.write(new byte[] {
+            'B',
+            (byte) milliseconds,
+            (byte) (milliseconds >>> 8),
+            (byte) (milliseconds >>> 16),
+            (byte) (milliseconds >>> 24)
+        });
+        output.flush();
     }
 
     public static void writeDamage(OutputStream output, int healthPoints) throws IOException {
