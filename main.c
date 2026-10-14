@@ -4,7 +4,7 @@
 #include <util/atomic.h>
 
 // Message types:
-// * B -> damage-output toggle interval in milliseconds (four bytes, little-endian, 1-INT32_MAX)
+// * B -> last + to first - press-start interval in ms (four bytes, little-endian, minimum 100)
 // * D -> damage in health points (one binary byte, 1-255)
 // * U -> unknown message type
 typedef struct {
@@ -18,10 +18,26 @@ typedef struct {
 #define BAUD 9600
 #define MY_UBRR F_CPU/16/BAUD-1
 
-volatile uint32_t damage_counter = 0;
-volatile uint32_t damage_delay = 100;
-volatile uint8_t damage_active = 0;
-volatile int damage_steps = 0;
+#define PRESS_MS 100UL
+#define BUTTON_MASK ((1 << PB5) | (1 << PB4))
+
+static const uint32_t BETWEEN_PRESSES_MS = 10UL;
+static const uint16_t PRESSES_PER_CYCLE = 1;
+
+typedef enum {
+    IDLE,
+    PRESS_PLUS,
+    WAIT_MINUS,
+    PRESS_MINUS,
+    WAIT_PLUS
+} button_phase_t;
+
+volatile uint32_t reversal_interval_ms = 1000UL;
+volatile uint32_t pending_cycles = 0;
+static uint16_t plus_remaining = 0;
+static uint16_t minus_remaining = 0;
+static uint32_t phase_ms = 0;
+static button_phase_t phase = IDLE;
 
 void uart_init(void) {
     unsigned int ubrr = MY_UBRR;
@@ -51,34 +67,67 @@ void uart_read_message(message_t *msg) {
     }
 }
 
+// Called only from the timer ISR.
+static void start_press(button_phase_t next_phase) {
+    PORTB = (PORTB & ~BUTTON_MASK) |
+            (next_phase == PRESS_PLUS ? (1 << PB5) : (1 << PB4));
+    phase = next_phase;
+    phase_ms = 0;
+    if (next_phase == PRESS_PLUS) plus_remaining--;
+    else minus_remaining--;
+}
+
+static void start_cycle(void) {
+    pending_cycles--;
+    plus_remaining = PRESSES_PER_CYCLE;
+    minus_remaining = PRESSES_PER_CYCLE;
+    start_press(PRESS_PLUS);
+}
+
 ISR(TIMER1_COMPA_vect) {
-    if (damage_active) {
-        damage_counter++;
-        if (damage_counter >= damage_delay) {
-            PORTB ^= (1 << PB5);
-            damage_counter = 0;
-            damage_steps--;
-            if (damage_steps <= 0) {
-                damage_active = 0;
-                damage_steps = 0;
-                PORTB &= ~(1 << PB5);
-            }
+    if (phase == IDLE) {
+        if (pending_cycles) start_cycle();
+        return;
+    }
+
+    phase_ms++;
+    if (phase == PRESS_PLUS && phase_ms >= PRESS_MS) {
+        PORTB &= ~BUTTON_MASK;
+        phase_ms = 0;
+        if (plus_remaining) {
+            phase = WAIT_PLUS;
+        } else if (reversal_interval_ms <= PRESS_MS) {
+            start_press(PRESS_MINUS);
+        } else {
+            phase = WAIT_MINUS;
         }
+    } else if (phase == WAIT_MINUS &&
+               phase_ms >= (minus_remaining == PRESSES_PER_CYCLE
+                            ? reversal_interval_ms - PRESS_MS : BETWEEN_PRESSES_MS)) {
+        start_press(PRESS_MINUS);
+    } else if (phase == PRESS_MINUS && phase_ms >= PRESS_MS) {
+        PORTB &= ~BUTTON_MASK;
+        phase_ms = 0;
+        phase = minus_remaining ? WAIT_MINUS : (pending_cycles ? WAIT_PLUS : IDLE);
+    } else if (phase == WAIT_PLUS && phase_ms >= BETWEEN_PRESSES_MS) {
+        if (plus_remaining) start_press(PRESS_PLUS);
+        else start_cycle();
     }
 }
 
 void timer1_init(void) {
     TCCR1B |= (1 << WGM12);
-    OCR1A = 16000;
+    OCR1A = 15999; // 1 ms at 16 MHz with no prescaler.
     TIMSK1 |= (1 << OCIE1A);
     TCCR1B |= (1 << CS10);
     sei();
 }
 
 int main(void) {
-    // ATmega328P Arduino Uno/Nano onboard LED is on PB5 (digital pin 13).
-    // Leave PB4 as an input; use the onboard LED for damage pulses only.
-    DDRB |= (1 << PB5);
+    // PB5 (digital pin 13, onboard LED) drives +; PB4 (pin 12) drives -.
+    // Relay-module inputs are assumed active-high. Both start off.
+    PORTB &= ~BUTTON_MASK;
+    DDRB |= BUTTON_MASK;
     uart_init();
     timer1_init();
 
@@ -87,16 +136,21 @@ int main(void) {
             message_t msg = {0};
             uart_read_message(&msg);
             if (msg.type == 'B') {
-                if (msg.pulse_ms >= 1 && msg.pulse_ms <= INT32_MAX) {
-                    // The 32-bit delay is shared with the timer ISR on an 8-bit MCU.
+                if (msg.pulse_ms <= INT32_MAX) {
+                    // B is measured from the last + press start to the first - press start.
+                    uint32_t interval = msg.pulse_ms < PRESS_MS ? PRESS_MS : msg.pulse_ms;
                     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-                        damage_delay = msg.pulse_ms;
+                        reversal_interval_ms = interval;
                     }
                 }
             } else if (msg.type == 'D') {
                 if (msg.damage_value == 0) msg.damage_value = 1;
-                damage_steps += msg.damage_value * 2;
-                damage_active = 1;
+                // The ISR consumes cycles; update the 32-bit queue atomically.
+                ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+                    if (pending_cycles <= UINT32_MAX - msg.damage_value) {
+                        pending_cycles += msg.damage_value;
+                    }
+                }
             } else {
                 // Handle unknown message type if needed
             }

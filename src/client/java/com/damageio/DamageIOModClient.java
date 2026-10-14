@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 
 public class DamageIOModClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("damageio");
+    private static final int DEFAULT_PULSE_MS = 1000;
 
     private SerialPort port;
     private OutputStream output;
@@ -54,7 +55,7 @@ public class DamageIOModClient implements ClientModInitializer {
                             }
                             int milliseconds = IntegerArgumentType.getInteger(context, "milliseconds");
                             if (!sendMessage('B', milliseconds)) return 0;
-                            context.getSource().sendFeedback(Text.literal("Damage pulse interval: " + milliseconds + " ms"));
+                            context.getSource().sendFeedback(Text.literal("Requested last + to first - press-start interval: " + milliseconds + " ms"));
                             return 1;
                         })))
                 .then(ClientCommandManager.literal("close")
@@ -103,6 +104,7 @@ public class DamageIOModClient implements ClientModInitializer {
                 }
                 port = available;
                 output = port.getOutputStream();
+                SerialProtocol.writePulse(output, DEFAULT_PULSE_MS);
                 lastPlayer = null;
                 return true;
             }
