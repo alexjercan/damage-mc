@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 public class DamageIOModClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("damageio");
     private static final int DEFAULT_PULSE_MS = 1000;
+    private static final int DEFAULT_LEVEL = 1;
 
     private SerialPort port;
     private OutputStream output;
@@ -55,7 +56,19 @@ public class DamageIOModClient implements ClientModInitializer {
                             }
                             int milliseconds = IntegerArgumentType.getInteger(context, "milliseconds");
                             if (!sendMessage('B', milliseconds)) return 0;
-                            context.getSource().sendFeedback(Text.literal("Requested last + to first - press-start interval: " + milliseconds + " ms"));
+                            context.getSource().sendFeedback(Text.literal("Requested delay from last + release to first - press: " + milliseconds + " ms"));
+                            return 1;
+                        })))
+                .then(ClientCommandManager.literal("level")
+                    .then(ClientCommandManager.argument("presses", IntegerArgumentType.integer(1, 10))
+                        .executes(context -> {
+                            if (output == null) {
+                                context.getSource().sendFeedback(Text.literal("Open a port with /damageio open <port> first."));
+                                return 0;
+                            }
+                            int level = IntegerArgumentType.getInteger(context, "presses");
+                            if (!sendMessage('L', level)) return 0;
+                            context.getSource().sendFeedback(Text.literal("Presses per button per cycle: " + level));
                             return 1;
                         })))
                 .then(ClientCommandManager.literal("close")
@@ -105,6 +118,7 @@ public class DamageIOModClient implements ClientModInitializer {
                 port = available;
                 output = port.getOutputStream();
                 SerialProtocol.writePulse(output, DEFAULT_PULSE_MS);
+                SerialProtocol.writeLevel(output, DEFAULT_LEVEL);
                 lastPlayer = null;
                 return true;
             }
@@ -120,6 +134,7 @@ public class DamageIOModClient implements ClientModInitializer {
         try {
             if (port == null || !port.isOpen()) throw new IOException("Serial port is closed");
             if (type == 'B') SerialProtocol.writePulse(output, value);
+            else if (type == 'L') SerialProtocol.writeLevel(output, value);
             else SerialProtocol.writeDamage(output, value);
             return true;
         } catch (IOException | RuntimeException e) {

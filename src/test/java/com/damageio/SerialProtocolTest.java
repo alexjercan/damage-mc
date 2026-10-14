@@ -25,6 +25,16 @@ class SerialProtocolTest {
     }
 
     @Test
+    void levelUsesOneByteAndValidatesRange() throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        SerialProtocol.writeLevel(output, 1);
+        SerialProtocol.writeLevel(output, 10);
+        assertArrayEquals(new byte[] {'L', 1, 'L', 10}, output.toByteArray());
+        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writeLevel(output, 0));
+        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writeLevel(output, 11));
+    }
+
+    @Test
     void damageUsesBinaryHealthPointsAndSplitsLargeAmounts() throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         SerialProtocol.writeDamage(output, 1);

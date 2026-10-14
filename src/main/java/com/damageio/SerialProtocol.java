@@ -3,7 +3,7 @@ package com.damageio;
 import java.io.IOException;
 import java.io.OutputStream;
 
-/** B has a four-byte little-endian value; D has a one-byte value. */
+/** B has a four-byte little-endian value; D and L have one-byte values. */
 public final class SerialProtocol {
     private SerialProtocol() {}
 
@@ -17,6 +17,11 @@ public final class SerialProtocol {
             (byte) (milliseconds >>> 24)
         });
         output.flush();
+    }
+
+    public static void writeLevel(OutputStream output, int level) throws IOException {
+        if (level < 1 || level > 10) throw new IllegalArgumentException("Level must be 1-10");
+        writeFrame(output, 'L', level);
     }
 
     public static void writeDamage(OutputStream output, int healthPoints) throws IOException {
