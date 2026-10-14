@@ -3,8 +3,8 @@
 #include <avr/interrupt.h>
 
 // Message types:
-// * B -> blink + value for delay in 100ms increments (e.g `B5` for 500ms)
-// * D -> damage + value for damage taken (e.g `D10` for 10 damage)
+// * B -> damage-output toggle interval in milliseconds (one binary byte, 1-255)
+// * D -> damage in health points (one binary byte, 1-255)
 // * U -> unknown message type
 typedef struct {
     char type;

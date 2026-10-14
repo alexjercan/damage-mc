@@ -3,187 +3,165 @@ package com.damageio;
 import com.fazecast.jSerialComm.SerialPort;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.suggestion.SuggestionProvider;
-import com.mojang.brigadier.suggestion.Suggestions;
-import com.mojang.brigadier.suggestion.SuggestionsBuilder;
-import java.io.PrintWriter;
-import java.util.concurrent.CompletableFuture;
+import java.io.IOException;
+import java.io.OutputStream;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.text.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class DamageIOModClient implements ClientModInitializer {
-	public static final String MOD_ID = "damageio";
+    private static final Logger LOGGER = LoggerFactory.getLogger("damageio");
 
-	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    private SerialPort port;
+    private OutputStream output;
+    private ClientPlayerEntity lastPlayer;
+    private float lastHealth;
+    private double pendingDamage;
 
-    private static SerialPort port;
-    private static PrintWriter writer;
-    private float lastHealth = -1.0f;
-
-	@Override
-	public void onInitializeClient() {
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            dispatcher.register(CommandManager.literal("serial")
-                .then(CommandManager.literal("open")
-                    .then(CommandManager.argument("port", StringArgumentType.string())
-                        .suggests(new PortSuggestionProvider())
-                        .executes(ctx -> {
-                            String portName = StringArgumentType.getString(ctx, "port");
-
-                            if (openPort(portName)) {
-                                ctx.getSource().sendFeedback(() -> Text.literal("Opened serial port: " + portName), false);
-                            } else {
-                                ctx.getSource().sendError(Text.literal("Failed to open port: " + portName));
+    @Override
+    public void onInitializeClient() {
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
+            dispatcher.register(ClientCommandManager.literal("damageio")
+                .then(ClientCommandManager.literal("open")
+                    .then(ClientCommandManager.argument("port", StringArgumentType.string())
+                        .suggests((context, builder) -> {
+                            for (SerialPort available : SerialPort.getCommPorts()) {
+                                builder.suggest(available.getSystemPortName());
                             }
-                            return 1;
+                            return builder.buildFuture();
                         })
-                    )
-                )
-                .then(CommandManager.literal("send")
-                    .then(CommandManager.argument("value", IntegerArgumentType.integer(0, 255))
-                        .executes(ctx -> {
-                            if (writer == null) {
-                                ctx.getSource().sendError(Text.literal("Serial port is not open. Use /serial set <port> first."));
+                        .executes(context -> {
+                            String name = StringArgumentType.getString(context, "port");
+                            if (openPort(name)) {
+                                context.getSource().sendFeedback(Text.literal("Opened serial port: " + name));
+                                return 1;
+                            }
+                            context.getSource().sendError(Text.literal("Could not open serial port: " + name));
+                            return 0;
+                        })))
+                .then(ClientCommandManager.literal("pulse")
+                    .then(ClientCommandManager.argument("milliseconds", IntegerArgumentType.integer(1, 255))
+                        .executes(context -> {
+                            if (output == null) {
+                                context.getSource().sendFeedback(Text.literal("Open a port with /damageio open <port> first."));
                                 return 0;
                             }
-
-                            int value = IntegerArgumentType.getInteger(ctx, "value");
-                            new BlinkMessage(value).sendToSerial(writer);
-                            ctx.getSource().sendFeedback(() -> Text.literal("Sent value: " + value), false);
+                            int milliseconds = IntegerArgumentType.getInteger(context, "milliseconds");
+                            if (!sendMessage('B', milliseconds)) return 0;
+                            context.getSource().sendFeedback(Text.literal("Damage pulse interval: " + milliseconds + " ms"));
                             return 1;
-                        })
-                    )
-                )
-                .then(CommandManager.literal("close")
-                    .executes(ctx -> {
+                        })))
+                .then(ClientCommandManager.literal("close")
+                    .executes(context -> {
                         closePort();
-                        ctx.getSource().sendFeedback(() -> Text.literal("Closed serial port"), false);
+                        context.getSource().sendFeedback(Text.literal("Closed serial port"));
                         return 1;
-                    })
-                )
-            );
-        });
+                    }))));
 
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (writer == null) return;
-
-            PlayerEntity player = MinecraftClient.getInstance().player;
-            if (player == null) return;
-
-            float currentHealth = player.getHealth();
-
-            if (lastHealth != -1.0f && currentHealth < lastHealth) {
-                float damage = lastHealth - currentHealth;
-                new DamageMessage((int) damage).sendToSerial(writer);
-                LOGGER.info("Player took damage: " + damage);
-            }
-
-            lastHealth = currentHealth;
-        });
-
-        LOGGER.info("Using Library Version v" + SerialPort.getVersion());
-	}
-
-    class PortSuggestionProvider implements SuggestionProvider<ServerCommandSource> {
-        @Override
-        public CompletableFuture<Suggestions> getSuggestions(CommandContext<ServerCommandSource> context, SuggestionsBuilder builder) throws CommandSyntaxException {
-            ServerCommandSource source = context.getSource();
-
-            SerialPort[] availablePorts = SerialPort.getCommPorts();
-		    LOGGER.info("Available serial ports:" + availablePorts.length);
-
-            for (SerialPort sp : availablePorts) {
-                builder.suggest(sp.getSystemPortName());
-		        LOGGER.info("Available port: " + sp.getSystemPortName() + " - " + sp.getDescriptivePortName() + " - " + sp.getPortDescription());
-            }
-
-            return builder.buildFuture();
-        }
+        ClientTickEvents.END_CLIENT_TICK.register(this::onClientTick);
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> closePort());
+        LOGGER.info("jSerialComm version {}", SerialPort.getVersion());
     }
 
-    private static int getPortIndex(String name) {
-        SerialPort[] ports = SerialPort.getCommPorts();
-        for (int i = 0; i < ports.length; i++) {
-            if (ports[i].getSystemPortName().equals(name)) {
-                return i;
-            }
+    private void onClientTick(MinecraftClient client) {
+        ClientPlayerEntity player = client.player;
+        if (player == null || output == null) {
+            lastPlayer = null;
+            pendingDamage = 0;
+            return;
+        }
+        if (player != lastPlayer) {
+            lastPlayer = player;
+            lastHealth = player.getHealth();
+            pendingDamage = 0;
+            return;
+        }
+        if (port == null || !port.isOpen()) {
+            reportConnectionLost(new IOException("Serial port is closed"));
+            return;
         }
 
-        return -1;
+        float health = player.getHealth();
+        if (health < lastHealth) {
+            pendingDamage += lastHealth - health;
+            int wholeDamage = (int) (pendingDamage + 0.00001);
+            if (wholeDamage > 0) {
+                pendingDamage -= wholeDamage;
+                LOGGER.info("Player lost {} health points", wholeDamage);
+                while (wholeDamage > 0) {
+                    int amount = Math.min(wholeDamage, 255);
+                    if (!sendMessage('D', amount)) break;
+                    wholeDamage -= amount;
+                }
+            }
+        }
+        lastHealth = health;
     }
 
-    private static boolean openPort(String name) {
+    private boolean openPort(String name) {
         closePort();
-        int index = getPortIndex(name);
-        if (index < 0) {
-            LOGGER.error("Port not found: " + name);
-            return false;
+        try {
+            for (SerialPort available : SerialPort.getCommPorts()) {
+                if (!available.getSystemPortName().equals(name)) continue;
+                if (!available.openPort()) {
+                    LOGGER.error("Could not open serial port {}", name);
+                    return false;
+                }
+                port = available;
+                output = port.getOutputStream();
+                lastPlayer = null;
+                return true;
+            }
+            LOGGER.error("Serial port not found: {}", name);
+        } catch (Exception e) {
+            LOGGER.error("Could not open serial port {}", name, e);
+            closePort();
         }
-        LOGGER.info("Opening port: " + name + " at index " + index);
-
-        port = SerialPort.getCommPorts()[index];
-        if (port.openPort()) {
-            writer = new PrintWriter(port.getOutputStream(), true);
-            return true;
-        }
-
-        port = null;
         return false;
     }
 
-    private static void closePort() {
-        if (writer != null) {
-            writer.close();
-            writer = null;
+    private boolean sendMessage(int type, int value) {
+        try {
+            if (port == null || !port.isOpen()) throw new IOException("Serial port is closed");
+            output.write(new byte[] { (byte) type, (byte) value });
+            output.flush();
+            return true;
+        } catch (IOException | RuntimeException e) {
+            reportConnectionLost(e);
+            return false;
         }
+    }
 
-        if (port != null && port.isOpen()) {
-            port.closePort();
+    private void reportConnectionLost(Exception e) {
+        LOGGER.error("Serial connection failed", e);
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player != null) {
+            client.player.sendMessage(Text.literal("DamageIO serial connection lost. Use /damageio open <port> to reconnect."), false);
+        }
+        closePort();
+    }
+
+    private void closePort() {
+        if (output != null) {
+            try {
+                output.close();
+            } catch (IOException e) {
+                LOGGER.error("Failed to close serial output", e);
+            }
+            output = null;
+        }
+        if (port != null) {
+            if (port.isOpen() && !port.closePort()) LOGGER.error("Failed to close serial port {}", port.getSystemPortName());
             port = null;
         }
-    }
-
-    interface Message {
-        void sendToSerial(PrintWriter writer);
-    }
-
-    class BlinkMessage implements Message {
-        private final int value;
-
-        public BlinkMessage(int value) {
-            this.value = value;
-        }
-
-        @Override
-        public void sendToSerial(PrintWriter writer) {
-            writer.write('B');
-            writer.write(value & 0xFF);
-            writer.flush();
-        }
-    }
-
-    class DamageMessage implements Message {
-        private final int value;
-
-        public DamageMessage(int value) {
-            this.value = value;
-        }
-
-        @Override
-        public void sendToSerial(PrintWriter writer) {
-            writer.write('D');
-            writer.write(value & 0xFF);
-            writer.flush();
-        }
+        lastPlayer = null;
+        pendingDamage = 0;
     }
 }

@@ -1,8 +1,9 @@
 # DamageIO
 
-Really simple mod that writes the damage dealt to the player to the serial
-port. An arduino board can read this data and use it to tase the player
-when they take damage.
+A client-side mod that writes the local player's health loss to a serial
+port. An Arduino board can read this data and use it to tase the player
+when they take damage. One health point (half a heart) sends one damage unit;
+fractional losses accumulate until they reach a whole health point.
 
 ### Quickstart
 
@@ -14,12 +15,14 @@ make upload
 ./gradlew runClient
 ```
 
-You will need to open the serial port from the game using the `/serial`
-command.
+Open the serial port from the game using a local client command. It also works
+when connected to a server; other players do not control your serial port.
 
 ```
-/serial open ttyACM0
+/damageio open ttyACM0
+/damageio pulse 5
+/damageio close
 ```
 
-For more information on how this works, see the [blog
-post](https://alexjercan.github.io/0006/).
+`pulse` sets the time between damage-output toggles in milliseconds (1-255).
+The mod jar includes jSerialComm. Install Fabric API alongside it.
