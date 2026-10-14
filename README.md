@@ -33,4 +33,4 @@ board. The mod requires Minecraft 1.21.8, Fabric Loader, and Java 21.
 
 CI runs the Java unit tests on pushes and pull requests. To publish a release,
 set `mod_version` in `gradle.properties`, then push the matching `v<mod_version>`
-tag (for example, `v1.0.0`).
+tag (for example, `v1.0.1`).
