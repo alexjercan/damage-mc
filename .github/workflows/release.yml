@@ -1,0 +1,52 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+      - name: check tag matches mod version
+        shell: bash
+        run: |
+          version=$(awk -F= '$1 == "mod_version" { print $2 }' gradle.properties)
+          if [[ -z "$version" || "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Tag $GITHUB_REF_NAME must match v<mod_version> (v$version)" >&2
+            exit 1
+          fi
+          echo "MOD_VERSION=$version" >> "$GITHUB_ENV"
+      - name: validate gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+      - name: setup jdk
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'microsoft'
+      - name: build mod and run tests
+        run: ./gradlew build --no-daemon
+      - name: install AVR compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-avr avr-libc binutils-avr
+      - name: build firmware
+        run: |
+          make main.hex
+          cp main.hex "build/libs/damageio-atmega328p-${MOD_VERSION}.hex"
+      - name: publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "build/libs/damageio-${MOD_VERSION}.jar" \
+            "build/libs/damageio-atmega328p-${MOD_VERSION}.hex" \
+            --verify-tag \
+            --title "damageio ${MOD_VERSION}" \
+            --notes "Install the mod jar with Minecraft 1.21.8, Fabric Loader, Fabric API, and Java 21. The jar includes jSerialComm. The .hex firmware is for an ATmega328P board; flash it separately with avrdude."

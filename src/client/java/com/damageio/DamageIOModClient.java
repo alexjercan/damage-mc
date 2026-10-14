@@ -22,8 +22,7 @@ public class DamageIOModClient implements ClientModInitializer {
     private SerialPort port;
     private OutputStream output;
     private ClientPlayerEntity lastPlayer;
-    private float lastHealth;
-    private double pendingDamage;
+    private final DamageCounter damageCounter = new DamageCounter();
 
     @Override
     public void onInitializeClient() {
@@ -74,35 +73,23 @@ public class DamageIOModClient implements ClientModInitializer {
         ClientPlayerEntity player = client.player;
         if (player == null || output == null) {
             lastPlayer = null;
-            pendingDamage = 0;
+            damageCounter.reset();
             return;
         }
         if (player != lastPlayer) {
             lastPlayer = player;
-            lastHealth = player.getHealth();
-            pendingDamage = 0;
-            return;
+            damageCounter.reset();
         }
         if (port == null || !port.isOpen()) {
             reportConnectionLost(new IOException("Serial port is closed"));
             return;
         }
 
-        float health = player.getHealth();
-        if (health < lastHealth) {
-            pendingDamage += lastHealth - health;
-            int wholeDamage = (int) (pendingDamage + 0.00001);
-            if (wholeDamage > 0) {
-                pendingDamage -= wholeDamage;
-                LOGGER.info("Player lost {} health points", wholeDamage);
-                while (wholeDamage > 0) {
-                    int amount = Math.min(wholeDamage, 255);
-                    if (!sendMessage('D', amount)) break;
-                    wholeDamage -= amount;
-                }
-            }
+        int wholeDamage = damageCounter.observe(player.getHealth());
+        if (wholeDamage > 0) {
+            LOGGER.info("Player lost {} health points", wholeDamage);
+            sendMessage('D', wholeDamage);
         }
-        lastHealth = health;
     }
 
     private boolean openPort(String name) {
@@ -130,8 +117,8 @@ public class DamageIOModClient implements ClientModInitializer {
     private boolean sendMessage(int type, int value) {
         try {
             if (port == null || !port.isOpen()) throw new IOException("Serial port is closed");
-            output.write(new byte[] { (byte) type, (byte) value });
-            output.flush();
+            if (type == 'B') SerialProtocol.writePulse(output, value);
+            else SerialProtocol.writeDamage(output, value);
             return true;
         } catch (IOException | RuntimeException e) {
             reportConnectionLost(e);
@@ -162,6 +149,6 @@ public class DamageIOModClient implements ClientModInitializer {
             port = null;
         }
         lastPlayer = null;
-        pendingDamage = 0;
+        damageCounter.reset();
     }
 }
