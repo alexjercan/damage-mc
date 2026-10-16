@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DamageIO | Relay wiring</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0c1423; color: #eaf1fc; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1300px; margin: auto; padding: 2rem 1rem 4rem; }
+    h1 { margin: 0 0 .5rem; font-size: clamp(1.7rem, 4vw, 2.6rem); }
+    p { line-height: 1.55; color: #b9c8df; }
+    .eyebrow { color: #74d9d0; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: .75rem; }
+    .diagram { overflow-x: auto; border: 1px solid #34445e; border-radius: 18px; background: #101b2e; box-shadow: 0 20px 55px #0005; }
+    svg { display: block; width: 100%; min-width: 900px; height: auto; }
+    svg text { font-family: system-ui, sans-serif; fill: #eaf1fc; }
+    svg .small { font-size: 13px; fill: #b9c8df; }
+    svg .label { font-size: 15px; font-weight: 650; }
+    svg .title { font-size: 21px; font-weight: 750; }
+    svg .card { fill: #182740; stroke: #506785; stroke-width: 2; }
+    svg .part { fill: #203451; stroke: #55708e; stroke-width: 1.5; }
+    svg .device { fill: #1d3045; stroke: #68839b; stroke-width: 2; }
+    svg .trace { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    svg .power { stroke: #ffbd69; }
+    svg .ground { stroke: #a6b4c9; }
+    svg .plus { stroke: #65ded0; }
+    svg .minus { stroke: #a8a1ff; }
+    svg .contact { stroke: #dce7f6; }
+    svg .terminal { fill: #101b2e; stroke: #dce7f6; stroke-width: 2; }
+    .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+    .note { padding: 1rem 1.2rem; background: #182740; border: 1px solid #34445e; border-radius: 12px; }
+    .note h2 { font-size: 1rem; margin: 0 0 .35rem; }
+    .note p { margin: 0; }
+    code { color: #8de6dc; }
+    a { color: #8de6dc; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Hardware reference</div>
+  <h1>Arduino + dual relay + button contacts</h1>
+  <p>ATmega328P Arduino (Uno or classic Nano). Two active-low relays close across the existing device buttons. The device has its own power source.</p>
+  <div class="diagram">
+    <svg viewBox="0 0 1240 810" role="img" aria-labelledby="diagram-title diagram-desc" xmlns="http://www.w3.org/2000/svg">
+      <title id="diagram-title">DamageIO Arduino and two-relay button wiring</title>
+      <desc id="diagram-desc">Arduino 5V to relay VCC, GND to GND, D10 to IN1 for plus, and D12 to IN2 for minus. Relay 1 COM and NO connect across the device plus button; relay 2 COM and NO connect across the minus button. The device uses separate power. NC terminals are unused.</desc>
+      <defs>
+        <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#30405a"/></pattern>
+      </defs>
+      <rect width="1240" height="810" fill="url(#grid)"/>
+
+      <!-- Control board -->
+      <rect class="card" x="40" y="105" width="300" height="345" rx="20"/>
+      <text class="title" x="64" y="148">Arduino</text>
+      <text class="small" x="64" y="173">Uno / classic Nano - ATmega328P</text>
+      <rect class="part" x="65" y="197" width="142" height="54" rx="9"/>
+      <text class="label" x="79" y="230">USB / serial</text>
+      <text class="small" x="65" y="415">Pins drive relay inputs only</text>
+      <text class="label" x="238" y="274">5V</text>
+      <text class="label" x="224" y="316">GND</text>
+      <text class="label" x="219" y="358">D10</text>
+      <text class="label" x="219" y="400">D12</text>
+      <circle class="terminal" cx="326" cy="268" r="7"/>
+      <circle class="terminal" cx="326" cy="310" r="7"/>
+      <circle class="terminal" cx="326" cy="352" r="7"/>
+      <circle class="terminal" cx="326" cy="394" r="7"/>
+
+      <!-- Module input wires -->
+      <path class="trace power" d="M333 268 H440"/>
+      <path class="trace ground" d="M333 310 H440"/>
+      <path class="trace plus" d="M333 352 H440"/>
+      <path class="trace minus" d="M333 394 H440"/>
+      <text class="small" x="353" y="254">5 V</text>
+      <text class="small" x="353" y="339">PB2 / +</text>
+      <text class="small" x="353" y="381">PB4 / -</text>
+
+      <!-- Two-channel relay module -->
+      <rect class="card" x="440" y="105" width="320" height="630" rx="20"/>
+      <text class="title" x="464" y="148">Two-relay module</text>
+      <text class="small" x="464" y="173">Active-low inputs; separate dry contacts</text>
+      <text class="label" x="462" y="274">VCC</text>
+      <text class="label" x="462" y="316">GND</text>
+      <text class="label" x="462" y="358">IN1</text>
+      <text class="label" x="462" y="400">IN2</text>
+      <circle class="terminal" cx="446" cy="268" r="7"/>
+      <circle class="terminal" cx="446" cy="310" r="7"/>
+      <circle class="terminal" cx="446" cy="352" r="7"/>
+      <circle class="terminal" cx="446" cy="394" r="7"/>
+      <rect class="part" x="462" y="428" width="268" height="132" rx="13"/>
+      <text class="label" x="480" y="453">K1 / plus</text>
+      <text class="small" x="480" y="476">COM to NO closes on press</text>
+      <text class="small" x="480" y="540">NC unused</text>
+      <circle class="terminal" cx="740" cy="455" r="7"/>
+      <circle class="terminal" cx="740" cy="508" r="7"/>
+      <text class="small" x="683" y="451">COM</text>
+      <text class="small" x="700" y="504">NO</text>
+      <rect class="part" x="462" y="578" width="268" height="132" rx="13"/>
+      <text class="label" x="480" y="603">K2 / minus</text>
+      <text class="small" x="480" y="626">COM to NO closes on press</text>
+      <text class="small" x="480" y="690">NC unused</text>
+      <circle class="terminal" cx="740" cy="605" r="7"/>
+      <circle class="terminal" cx="740" cy="658" r="7"/>
+      <text class="small" x="683" y="601">COM</text>
+      <text class="small" x="700" y="654">NO</text>
+
+      <!-- Device: button nodes are connected by either the original button or the relay -->
+      <rect class="device" x="850" y="105" width="350" height="630" rx="20"/>
+      <text class="title" x="874" y="148">Device</text>
+      <text class="small" x="874" y="173">Own power source - no Arduino 5V/GND</text>
+      <rect class="part" x="874" y="196" width="165" height="52" rx="9"/>
+      <text class="label" x="890" y="228">Own power</text>
+      <text class="small" x="874" y="307">Existing four-leg buttons</text>
+
+      <!-- Parallel + button path; A and B are opposite electrical sides -->
+      <text class="label" x="875" y="375">+ button</text>
+      <text class="small" x="875" y="400">Side A</text>
+      <text class="small" x="1115" y="400">Side B</text>
+      <path class="trace contact" d="M890 455 H970 M1040 455 H1160"/>
+      <circle class="terminal" cx="890" cy="455" r="6"/>
+      <circle class="terminal" cx="1160" cy="455" r="6"/>
+      <rect class="part" x="970" y="430" width="70" height="50" rx="10"/>
+      <text class="label" x="985" y="461">+</text>
+      <path class="trace plus" d="M747 455 H890"/>
+      <path class="trace plus" d="M747 508 H826 V527 H1180 V455 H1166"/>
+      <text class="small" x="870" y="546">Relay 1 NO: parallel to + button</text>
+
+      <!-- Parallel - button path -->
+      <text class="label" x="875" y="590">- button</text>
+      <text class="small" x="875" y="615">Side A</text>
+      <text class="small" x="1115" y="615">Side B</text>
+      <path class="trace contact" d="M890 635 H970 M1040 635 H1160"/>
+      <circle class="terminal" cx="890" cy="635" r="6"/>
+      <circle class="terminal" cx="1160" cy="635" r="6"/>
+      <rect class="part" x="970" y="610" width="70" height="50" rx="10"/>
+      <text class="label" x="987" y="641">-</text>
+      <path class="trace minus" d="M747 605 H818 V635 H890"/>
+      <path class="trace minus" d="M747 658 H800 V695 H1180 V635 H1166"/>
+      <text class="small" x="870" y="714">Relay 2 NO: parallel to - button</text>
+      <text class="small" x="42" y="770">Only the two button-contact pairs cross into the device. Neither pair connects to the Arduino power or ground.</text>
+    </svg>
+  </div>
+  <div class="notes">
+    <section class="note"><h2>Button legs</h2><p>On each four-leg button, the two wires go to opposite electrical sides. Confirm the sides with a continuity meter while the device is unpowered.</p></section>
+    <section class="note"><h2>Off and on</h2><p>Both inputs are HIGH at idle (relay off). A 100 ms LOW pulse on D10 or D12 energizes that relay. Use COM and NO, not NC.</p></section>
+    <section class="note"><h2>Timing</h2><p>There is a 50 ms gap between repeated presses and between cycles. Level L produces L separate plus presses and L separate minus presses per cycle. The plus-to-minus delay defaults to 1000 ms.</p></section>
+    <section class="note"><h2>Startup</h2><p>Opening the serial port can reset the Arduino. Pins are not controlled by firmware during reset. Test for clicks with the device disconnected. D13 is not used.</p></section>
+  </div>
+  <p>See the <a href="relay-wiring.md">text wiring reference</a>. This diagram is a connection guide, not a pinout for every relay board; check your board's terminal labels and voltage rating.</p>
+</main>
+</body>
+</html>

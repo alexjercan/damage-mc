@@ -8,6 +8,8 @@ fractional losses accumulate until they reach a whole health point.
 ### Quickstart
 
 Build the C code and flash it to the Arduino and then run the mod in Minecraft.
+See [relay wiring](docs/relay-wiring.md) for the Arduino, relay module, and
+button-contact schematic.
 
 ```console
 nix develop --show-trace --command fish
