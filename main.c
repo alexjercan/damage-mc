@@ -20,7 +20,7 @@ typedef struct {
 #define BAUD 9600
 #define MY_UBRR F_CPU/16/BAUD-1
 
-#define BUTTON_MASK ((1 << PB5) | (1 << PB4))
+#define BUTTON_MASK ((1 << PB2) | (1 << PB4))
 
 // TODO: Constants that need to be fine tuned for each device
 #define MAX_LEVEL 10U
@@ -77,8 +77,9 @@ void uart_read_message(message_t *msg) {
 }
 
 static void start_press(button_phase_t next_phase) {
-    PORTB = (PORTB & ~BUTTON_MASK) |
-            (next_phase == PRESS_PLUS ? (1 << PB5) : (1 << PB4));
+    // Active-low relay inputs: release both, then pull the selected input LOW.
+    PORTB = (PORTB | BUTTON_MASK) &
+            ~(next_phase == PRESS_PLUS ? (1 << PB2) : (1 << PB4));
     phase = next_phase;
     phase_ms = 0;
     if (next_phase == PRESS_PLUS) plus_remaining--;
@@ -101,7 +102,7 @@ ISR(TIMER1_COMPA_vect) {
 
     phase_ms++;
     if (phase == PRESS_PLUS && phase_ms >= PRESS_MS) {
-        PORTB &= ~BUTTON_MASK;
+        PORTB |= BUTTON_MASK;
         phase_ms = 0;
         phase = plus_remaining ? WAIT_PLUS : WAIT_MINUS;
     } else if (phase == WAIT_MINUS &&
@@ -109,7 +110,7 @@ ISR(TIMER1_COMPA_vect) {
                             ? plus_to_minus_delay_ms : BETWEEN_PRESSES_MS)) {
         start_press(PRESS_MINUS);
     } else if (phase == PRESS_MINUS && phase_ms >= PRESS_MS) {
-        PORTB &= ~BUTTON_MASK;
+        PORTB |= BUTTON_MASK;
         phase_ms = 0;
         phase = minus_remaining ? WAIT_MINUS : (pending_cycles ? WAIT_PLUS : IDLE);
     } else if (phase == WAIT_PLUS && phase_ms >= BETWEEN_PRESSES_MS) {
@@ -127,7 +128,8 @@ void timer1_init(void) {
 }
 
 int main(void) {
-    PORTB &= ~BUTTON_MASK;
+    // Set the OFF level before switching the pins to outputs.
+    PORTB |= BUTTON_MASK;
     DDRB |= BUTTON_MASK;
     uart_init();
     timer1_init();
