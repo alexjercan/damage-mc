@@ -4,6 +4,7 @@ import com.fazecast.jSerialComm.SerialPort;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
@@ -18,16 +19,20 @@ import org.slf4j.LoggerFactory;
 
 public class DamageIOModClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("damageio");
-    private static final int DEFAULT_PULSE_MS = 1000;
-    private static final int DEFAULT_LEVEL = 1;
     private static final int MODE_NORMAL = 0;
     private static final int MODE_PROPORTIONAL = 1;
 
     private int currentMode = MODE_PROPORTIONAL;
+    private int pulseMs = 1000;
+    private int normalLevel = 1;
+    private final DamageCounter damageCounter = new DamageCounter();
+    private final DamageSequencer sequencer = new DamageSequencer();
     private SerialPort port;
+    private InputStream input;
     private OutputStream output;
     private ClientPlayerEntity lastPlayer;
-    private final DamageCounter damageCounter = new DamageCounter();
+    private long readyAt;
+    private boolean closing;
 
     @Override
     public void onInitializeClient() {
@@ -53,25 +58,15 @@ public class DamageIOModClient implements ClientModInitializer {
                 .then(ClientCommandManager.literal("pulse")
                     .then(ClientCommandManager.argument("milliseconds", IntegerArgumentType.integer(1))
                         .executes(context -> {
-                            if (output == null) {
-                                context.getSource().sendFeedback(Text.literal("Open a port with /damageio open <port> first."));
-                                return 0;
-                            }
-                            int milliseconds = IntegerArgumentType.getInteger(context, "milliseconds");
-                            if (!sendMessage('B', milliseconds)) return 0;
-                            context.getSource().sendFeedback(Text.literal("Requested delay from last + release to first - press: " + milliseconds + " ms"));
+                            pulseMs = IntegerArgumentType.getInteger(context, "milliseconds");
+                            context.getSource().sendFeedback(Text.literal("Delay at target level: " + pulseMs + " ms"));
                             return 1;
                         })))
                 .then(ClientCommandManager.literal("level")
                     .then(ClientCommandManager.argument("presses", IntegerArgumentType.integer(1, 50))
                         .executes(context -> {
-                            if (output == null) {
-                                context.getSource().sendFeedback(Text.literal("Open a port with /damageio open <port> first."));
-                                return 0;
-                            }
-                            int level = IntegerArgumentType.getInteger(context, "presses");
-                            if (!sendMessage('L', level)) return 0;
-                            context.getSource().sendFeedback(Text.literal("Presses per button per cycle: " + level));
+                            normalLevel = IntegerArgumentType.getInteger(context, "presses");
+                            context.getSource().sendFeedback(Text.literal("Normal-mode target level: " + normalLevel));
                             return 1;
                         })))
                 .then(ClientCommandManager.literal("mode")
@@ -82,10 +77,6 @@ public class DamageIOModClient implements ClientModInitializer {
                             return builder.buildFuture();
                         })
                         .executes(context -> {
-                            if (output == null) {
-                                context.getSource().sendFeedback(Text.literal("Open a port with /damageio open <port> first."));
-                                return 0;
-                            }
                             String name = StringArgumentType.getString(context, "name");
                             int mode;
                             if (name.equalsIgnoreCase("NORMAL")) mode = MODE_NORMAL;
@@ -94,15 +85,17 @@ public class DamageIOModClient implements ClientModInitializer {
                                 context.getSource().sendError(Text.literal("Mode must be NORMAL or PROPORTIONAL."));
                                 return 0;
                             }
-                            if (!sendMessage('M', mode)) return 0;
+                            if (mode != currentMode) sequencer.cancel();
                             currentMode = mode;
                             context.getSource().sendFeedback(Text.literal("Mode: " + name.toUpperCase(java.util.Locale.ROOT)));
                             return 1;
                         })))
                 .then(ClientCommandManager.literal("close")
                     .executes(context -> {
-                        closePort();
-                        context.getSource().sendFeedback(Text.literal("Closed serial port"));
+                        closing = true;
+                        sequencer.cancel();
+                        if (sequencer.isIdle()) closePort();
+                        context.getSource().sendFeedback(Text.literal("Stopping output and closing serial port"));
                         return 1;
                     }))));
 
@@ -112,44 +105,67 @@ public class DamageIOModClient implements ClientModInitializer {
     }
 
     private void onClientTick(MinecraftClient client) {
-        ClientPlayerEntity player = client.player;
-        if (player == null || output == null) {
+        if (output == null) {
             lastPlayer = null;
             damageCounter.reset();
             return;
-        }
-        if (player != lastPlayer) {
-            lastPlayer = player;
-            damageCounter.reset();
         }
         if (port == null || !port.isOpen()) {
             reportConnectionLost(new IOException("Serial port is closed"));
             return;
         }
+        try {
+            long now = System.nanoTime();
+            while (port.bytesAvailable() > 0) {
+                int status = input.read();
+                if (status < 0) throw new IOException("Serial ACK stream ended");
+                sequencer.acknowledge(status, System.nanoTime());
+            }
 
-        int wholeDamage = damageCounter.observe(player.getHealth());
-        if (wholeDamage > 0) {
-            LOGGER.info("Player lost {} health points", wholeDamage);
-            sendMessage('D', wholeDamage);
+            ClientPlayerEntity player = client.player;
+            if (player == null || closing) {
+                lastPlayer = null;
+                damageCounter.reset();
+                sequencer.cancel();
+            } else {
+                if (player != lastPlayer) {
+                    lastPlayer = player;
+                    damageCounter.reset();
+                }
+                int wholeDamage = damageCounter.observe(player.getHealth());
+                if (wholeDamage > 0 && !sequencer.addDamage(wholeDamage,
+                        currentMode == MODE_PROPORTIONAL, normalLevel, pulseMs)) {
+                    LOGGER.warn("DamageIO event queue full; dropping {} health points", wholeDamage);
+                }
+            }
+
+            if (now >= readyAt) {
+                Integer target = sequencer.nextTarget(now);
+                if (target != null) SerialProtocol.writeTarget(output, target);
+            }
+            if (closing && sequencer.isIdle()) closePort();
+        } catch (IOException | IllegalStateException e) {
+            reportConnectionLost(e);
         }
     }
 
     private boolean openPort(String name) {
-        closePort();
+        // Do not abandon an active level change. Use /damageio close first.
+        if (output != null) return false;
         try {
             for (SerialPort available : SerialPort.getCommPorts()) {
                 if (!available.getSystemPortName().equals(name)) continue;
-                if (!available.openPort()) {
-                    LOGGER.error("Could not open serial port {}", name);
-                    return false;
-                }
+                if (!available.openPort()) return false;
                 port = available;
+                port.setComPortTimeouts(SerialPort.TIMEOUT_NONBLOCKING, 0, 0);
+                input = port.getInputStream();
                 output = port.getOutputStream();
-                SerialProtocol.writeMode(output, MODE_PROPORTIONAL);
-                SerialProtocol.writePulse(output, DEFAULT_PULSE_MS);
-                SerialProtocol.writeLevel(output, DEFAULT_LEVEL);
+                // Opening the port resets many Arduino boards; do not send to the bootloader.
+                readyAt = System.nanoTime() + 2_000_000_000L;
+                sequencer.reset();
                 currentMode = MODE_PROPORTIONAL;
                 lastPlayer = null;
+                closing = false;
                 return true;
             }
             LOGGER.error("Serial port not found: {}", name);
@@ -158,20 +174,6 @@ public class DamageIOModClient implements ClientModInitializer {
             closePort();
         }
         return false;
-    }
-
-    private boolean sendMessage(int type, int value) {
-        try {
-            if (port == null || !port.isOpen()) throw new IOException("Serial port is closed");
-            if (type == 'B') SerialProtocol.writePulse(output, value);
-            else if (type == 'L') SerialProtocol.writeLevel(output, value);
-            else if (type == 'M') SerialProtocol.writeMode(output, value);
-            else SerialProtocol.writeDamage(output, value);
-            return true;
-        } catch (IOException | RuntimeException e) {
-            reportConnectionLost(e);
-            return false;
-        }
     }
 
     private void reportConnectionLost(Exception e) {
@@ -184,12 +186,12 @@ public class DamageIOModClient implements ClientModInitializer {
     }
 
     private void closePort() {
+        if (input != null) {
+            try { input.close(); } catch (IOException e) { LOGGER.error("Failed to close serial input", e); }
+            input = null;
+        }
         if (output != null) {
-            try {
-                output.close();
-            } catch (IOException e) {
-                LOGGER.error("Failed to close serial output", e);
-            }
+            try { output.close(); } catch (IOException e) { LOGGER.error("Failed to close serial output", e); }
             output = null;
         }
         if (port != null) {
@@ -197,7 +199,8 @@ public class DamageIOModClient implements ClientModInitializer {
             port = null;
         }
         lastPlayer = null;
-        currentMode = MODE_PROPORTIONAL;
+        closing = false;
+        sequencer.reset();
         damageCounter.reset();
     }
 }
