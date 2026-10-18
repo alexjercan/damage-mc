@@ -49,4 +49,4 @@ jobs:
             "build/libs/damageio-atmega328p-${MOD_VERSION}.hex" \
             --verify-tag \
             --title "damageio ${MOD_VERSION}" \
-            --notes "Install the mod jar with Minecraft 1.21.8, Fabric Loader, Fabric API, and Java 21. The jar includes jSerialComm. The .hex firmware is for an ATmega328P board; flash it separately with avrdude."
+            --notes "Breaking change: mod and firmware must both be upgraded. The 9600-baud protocol now sends two bytes [channel 0=P1 or 1=P2, target level 0-50] and uses completion/rejection ACKs. Minecraft controls P1 only. P2 relay inputs use D8 (+) and D9 (-); P1 keeps D10 (+) and D12 (-). Levels reset when the Arduino resets. Four-relay hardware has not been validated on a physical device. Install the mod jar with Minecraft 1.21.8, Fabric Loader, Fabric API, and Java 21. The jar includes jSerialComm. Flash the .hex firmware on an ATmega328P separately with avrdude."
