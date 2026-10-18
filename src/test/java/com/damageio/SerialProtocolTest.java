@@ -35,6 +35,16 @@ class SerialProtocolTest {
     }
 
     @Test
+    void modeUsesOneByteAndValidatesRange() throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        SerialProtocol.writeMode(output, 0);
+        SerialProtocol.writeMode(output, 1);
+        assertArrayEquals(new byte[] {'M', 0, 'M', 1}, output.toByteArray());
+        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writeMode(output, -1));
+        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writeMode(output, 2));
+    }
+
+    @Test
     void damageUsesBinaryHealthPointsAndSplitsLargeAmounts() throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         SerialProtocol.writeDamage(output, 1);

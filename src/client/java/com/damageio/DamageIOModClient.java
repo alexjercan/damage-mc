@@ -20,7 +20,10 @@ public class DamageIOModClient implements ClientModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger("damageio");
     private static final int DEFAULT_PULSE_MS = 1000;
     private static final int DEFAULT_LEVEL = 1;
+    private static final int MODE_NORMAL = 0;
+    private static final int MODE_PROPORTIONAL = 1;
 
+    private int currentMode = MODE_PROPORTIONAL;
     private SerialPort port;
     private OutputStream output;
     private ClientPlayerEntity lastPlayer;
@@ -60,7 +63,7 @@ public class DamageIOModClient implements ClientModInitializer {
                             return 1;
                         })))
                 .then(ClientCommandManager.literal("level")
-                    .then(ClientCommandManager.argument("presses", IntegerArgumentType.integer(1, 10))
+                    .then(ClientCommandManager.argument("presses", IntegerArgumentType.integer(1, 50))
                         .executes(context -> {
                             if (output == null) {
                                 context.getSource().sendFeedback(Text.literal("Open a port with /damageio open <port> first."));
@@ -69,6 +72,31 @@ public class DamageIOModClient implements ClientModInitializer {
                             int level = IntegerArgumentType.getInteger(context, "presses");
                             if (!sendMessage('L', level)) return 0;
                             context.getSource().sendFeedback(Text.literal("Presses per button per cycle: " + level));
+                            return 1;
+                        })))
+                .then(ClientCommandManager.literal("mode")
+                    .then(ClientCommandManager.argument("name", StringArgumentType.word())
+                        .suggests((context, builder) -> {
+                            builder.suggest("NORMAL");
+                            builder.suggest("PROPORTIONAL");
+                            return builder.buildFuture();
+                        })
+                        .executes(context -> {
+                            if (output == null) {
+                                context.getSource().sendFeedback(Text.literal("Open a port with /damageio open <port> first."));
+                                return 0;
+                            }
+                            String name = StringArgumentType.getString(context, "name");
+                            int mode;
+                            if (name.equalsIgnoreCase("NORMAL")) mode = MODE_NORMAL;
+                            else if (name.equalsIgnoreCase("PROPORTIONAL")) mode = MODE_PROPORTIONAL;
+                            else {
+                                context.getSource().sendError(Text.literal("Mode must be NORMAL or PROPORTIONAL."));
+                                return 0;
+                            }
+                            if (!sendMessage('M', mode)) return 0;
+                            currentMode = mode;
+                            context.getSource().sendFeedback(Text.literal("Mode: " + name.toUpperCase(java.util.Locale.ROOT)));
                             return 1;
                         })))
                 .then(ClientCommandManager.literal("close")
@@ -117,8 +145,10 @@ public class DamageIOModClient implements ClientModInitializer {
                 }
                 port = available;
                 output = port.getOutputStream();
+                SerialProtocol.writeMode(output, MODE_PROPORTIONAL);
                 SerialProtocol.writePulse(output, DEFAULT_PULSE_MS);
                 SerialProtocol.writeLevel(output, DEFAULT_LEVEL);
+                currentMode = MODE_PROPORTIONAL;
                 lastPlayer = null;
                 return true;
             }
@@ -135,6 +165,7 @@ public class DamageIOModClient implements ClientModInitializer {
             if (port == null || !port.isOpen()) throw new IOException("Serial port is closed");
             if (type == 'B') SerialProtocol.writePulse(output, value);
             else if (type == 'L') SerialProtocol.writeLevel(output, value);
+            else if (type == 'M') SerialProtocol.writeMode(output, value);
             else SerialProtocol.writeDamage(output, value);
             return true;
         } catch (IOException | RuntimeException e) {
@@ -166,6 +197,7 @@ public class DamageIOModClient implements ClientModInitializer {
             port = null;
         }
         lastPlayer = null;
+        currentMode = MODE_PROPORTIONAL;
         damageCounter.reset();
     }
 }

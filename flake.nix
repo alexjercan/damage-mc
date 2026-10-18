@@ -22,6 +22,7 @@
             glfw
             gradle
             jdk21
+            (python3.withPackages (ps: [ ps.pyserial ]))
             libGL
             openal
             alsa-lib

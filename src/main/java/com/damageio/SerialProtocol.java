@@ -3,7 +3,7 @@ package com.damageio;
 import java.io.IOException;
 import java.io.OutputStream;
 
-/** B has a four-byte little-endian value; D and L have one-byte values. */
+/** B has a four-byte little-endian value; D, L, and M have one-byte values. */
 public final class SerialProtocol {
     private SerialProtocol() {}
 
@@ -24,6 +24,11 @@ public final class SerialProtocol {
         writeFrame(output, 'L', level);
     }
 
+    public static void writeMode(OutputStream output, int mode) throws IOException {
+        if (mode != 0 && mode != 1) throw new IllegalArgumentException("Mode must be 0 or 1");
+        writeFrame(output, 'M', mode);
+    }
+
     public static void writeDamage(OutputStream output, int healthPoints) throws IOException {
         if (healthPoints < 0) throw new IllegalArgumentException("Damage must not be negative");
         while (healthPoints > 0) {
@@ -34,7 +39,7 @@ public final class SerialProtocol {
     }
 
     private static void writeFrame(OutputStream output, int type, int value) throws IOException {
-        if (value < 1 || value > 255) throw new IllegalArgumentException("Frame value must be 1-255");
+        if (value < 0 || value > 255) throw new IllegalArgumentException("Frame value must be 0-255");
         output.write(new byte[] { (byte) type, (byte) value });
         output.flush();
     }

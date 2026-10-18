@@ -22,5 +22,20 @@ when connected to a server; other players do not control your serial port.
 
 ```
 /damageio open ttyACM0
+/damageio mode NORMAL
+/damageio mode PROPORTIONAL
 /damageio close
 ```
+
+`PROPORTIONAL` is the default mode when the Arduino starts and when the mod
+opens a port. Use `/damageio mode NORMAL` to switch to per-point cycles.
+
+To smoke-test proportional damage without Minecraft, close the mod's serial
+port first, then run this from the dev shell (it triggers the relay):
+
+```console
+python3 smoke_test.py /dev/ttyACM0 5
+```
+
+The second argument is damage from 1 to 20. The script selects proportional
+mode and sends one damage frame after the Arduino has time to reset.

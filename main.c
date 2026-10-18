@@ -5,8 +5,9 @@
 
 // NOTE: Message types:
 // * B -> last + release to first - press interval in ms (four bytes, little-endian, minimum 100)
-// * D -> damage in health points (one binary byte, 1-255)
+// * D -> damage in health points (one binary byte, 1-255; proportional clamps to 20)
 // * L -> presses per button per cycle (one binary byte, clamped to 1-10)
+// * M -> mode (one binary byte: 0 normal, 1 proportional)
 // * U -> unknown message type
 typedef struct {
     char type;
@@ -14,6 +15,7 @@ typedef struct {
         uint32_t pulse_ms;
         uint8_t damage_value;
         uint8_t level_value;
+        uint8_t mode_value;
     };
 } message_t;
 
@@ -22,13 +24,18 @@ typedef struct {
 
 #define BUTTON_MASK ((1 << PB2) | (1 << PB4))
 
+#define MAX_LEVEL 50U
+#define MODE_NORMAL 0U
+#define MODE_PROPORTIONAL 1U
+#define PROPORTIONAL_QUEUE_SIZE 64U
+
 // TODO: Constants that need to be fine tuned for each device
-#define MAX_LEVEL 10U
 #define PRESS_MS 100UL
 #define BETWEEN_PRESSES_MS 50UL
 
 // NOTE: The configurable parameters of the mod: level (presses per cycle) and the delay between level and stop
 volatile uint8_t presses_per_cycle = 1;
+volatile uint8_t current_mode = MODE_PROPORTIONAL;
 volatile uint32_t plus_to_minus_delay_ms = 1000UL;
 
 typedef enum {
@@ -41,6 +48,10 @@ typedef enum {
 
 static uint8_t cycle_press_count = 1;
 volatile uint32_t pending_cycles = 0;
+// Keep each damage event as one cycle; drop new events if the queue is full.
+static volatile uint8_t proportional_queue[PROPORTIONAL_QUEUE_SIZE];
+static volatile uint8_t proportional_head = 0;
+static volatile uint8_t proportional_tail = 0;
 static uint8_t plus_remaining = 0;
 static uint8_t minus_remaining = 0;
 static uint32_t phase_ms = 0;
@@ -71,6 +82,8 @@ void uart_read_message(message_t *msg) {
         msg->damage_value = uart_read();
     } else if (msg->type == 'L') {
         msg->level_value = uart_read();
+    } else if (msg->type == 'M') {
+        msg->mode_value = uart_read();
     } else {
         msg->type = 'U';
     }
@@ -86,17 +99,30 @@ static void start_press(button_phase_t next_phase) {
     else minus_remaining--;
 }
 
-static void start_cycle(void) {
-    pending_cycles--;
-    cycle_press_count = presses_per_cycle;
-    plus_remaining = cycle_press_count;
-    minus_remaining = cycle_press_count;
+static void start_cycle(uint8_t count) {
+    cycle_press_count = count;
+    plus_remaining = count;
+    minus_remaining = count;
     start_press(PRESS_PLUS);
+}
+
+static uint8_t proportional_presses(uint8_t damage) {
+    // Rounded linear interpolation: 1 -> 10, 20 -> 50.
+    return 10U + ((uint16_t)(damage - 1U) * 40U + 9U) / 19U;
 }
 
 ISR(TIMER1_COMPA_vect) {
     if (phase == IDLE) {
-        if (pending_cycles) start_cycle();
+        if (current_mode == MODE_NORMAL) {
+            if (pending_cycles) {
+                pending_cycles--;
+                start_cycle(presses_per_cycle);
+            }
+        } else if (proportional_head != proportional_tail) {
+            uint8_t damage = proportional_queue[proportional_tail];
+            proportional_tail = (proportional_tail + 1U) % PROPORTIONAL_QUEUE_SIZE;
+            start_cycle(proportional_presses(damage));
+        }
         return;
     }
 
@@ -112,10 +138,14 @@ ISR(TIMER1_COMPA_vect) {
     } else if (phase == PRESS_MINUS && phase_ms >= PRESS_MS) {
         PORTB |= BUTTON_MASK;
         phase_ms = 0;
-        phase = minus_remaining ? WAIT_MINUS : (pending_cycles ? WAIT_PLUS : IDLE);
+        phase = minus_remaining ? WAIT_MINUS :
+                (current_mode == MODE_NORMAL && pending_cycles ? WAIT_PLUS : IDLE);
     } else if (phase == WAIT_PLUS && phase_ms >= BETWEEN_PRESSES_MS) {
         if (plus_remaining) start_press(PRESS_PLUS);
-        else start_cycle();
+        else {
+            pending_cycles--;
+            start_cycle(presses_per_cycle);
+        }
     }
 }
 
@@ -148,11 +178,38 @@ int main(void) {
             } else if (msg.type == 'L') {
                 presses_per_cycle = msg.level_value < 1 ? 1 :
                                     (msg.level_value > MAX_LEVEL ? MAX_LEVEL : msg.level_value);
+            } else if (msg.type == 'M') {
+                if (msg.mode_value <= MODE_PROPORTIONAL) {
+                    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+                        if (msg.mode_value != current_mode) {
+                            PORTB |= BUTTON_MASK;
+                            phase = IDLE;
+                            pending_cycles = 0;
+                            proportional_head = 0;
+                            proportional_tail = 0;
+                            plus_remaining = 0;
+                            minus_remaining = 0;
+                            phase_ms = 0;
+                        }
+                        current_mode = msg.mode_value;
+                    }
+                }
             } else if (msg.type == 'D') {
-                if (msg.damage_value == 0) msg.damage_value = 1;
-                ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-                    if (pending_cycles <= UINT32_MAX - msg.damage_value) {
-                        pending_cycles += msg.damage_value;
+                if (current_mode == MODE_NORMAL) {
+                    if (msg.damage_value == 0) msg.damage_value = 1;
+                    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+                        if (pending_cycles <= UINT32_MAX - msg.damage_value) {
+                            pending_cycles += msg.damage_value;
+                        }
+                    }
+                } else if (msg.damage_value >= 1) {
+                    uint8_t damage = msg.damage_value > 20 ? 20 : msg.damage_value;
+                    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+                        uint8_t next = (proportional_head + 1U) % PROPORTIONAL_QUEUE_SIZE;
+                        if (next != proportional_tail) {
+                            proportional_queue[proportional_head] = damage;
+                            proportional_head = next;
+                        }
                     }
                 }
             } else {
