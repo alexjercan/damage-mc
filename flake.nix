@@ -1,5 +1,5 @@
 {
-  description = "Development environment for the damageio Minecraft mod and Arduino firmware";
+  description = "Development environment for DamageIO game integrations and Arduino firmware";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
@@ -22,7 +22,8 @@
             glfw
             gradle
             jdk21
-            (python3.withPackages (ps: [ ps.pyserial ]))
+            (python3.withPackages (ps: [ ps.pyserial ps.mss ps.pillow ]))
+            tesseract
             libGL
             openal
             alsa-lib

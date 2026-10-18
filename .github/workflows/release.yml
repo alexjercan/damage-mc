@@ -17,7 +17,7 @@ jobs:
       - name: check tag matches mod version
         shell: bash
         run: |
-          version=$(awk -F= '$1 == "mod_version" { print $2 }' gradle.properties)
+          version=$(awk -F= '$1 == "mod_version" { print $2 }' minecraft/gradle.properties)
           if [[ -z "$version" || "$GITHUB_REF_NAME" != "v$version" ]]; then
             echo "Tag $GITHUB_REF_NAME must match v<mod_version> (v$version)" >&2
             exit 1
@@ -31,7 +31,7 @@ jobs:
           java-version: '21'
           distribution: 'microsoft'
       - name: build mod and run tests
-        run: ./gradlew build --no-daemon
+        run: cd minecraft && ./gradlew build --no-daemon
       - name: install AVR compiler
         run: |
           sudo apt-get update
@@ -39,14 +39,14 @@ jobs:
       - name: build firmware
         run: |
           make main.hex
-          cp main.hex "build/libs/damageio-atmega328p-${MOD_VERSION}.hex"
+          cp main.hex "minecraft/build/libs/damageio-atmega328p-${MOD_VERSION}.hex"
       - name: publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            "build/libs/damageio-${MOD_VERSION}.jar" \
-            "build/libs/damageio-atmega328p-${MOD_VERSION}.hex" \
+            "minecraft/build/libs/damageio-${MOD_VERSION}.jar" \
+            "minecraft/build/libs/damageio-atmega328p-${MOD_VERSION}.hex" \
             --verify-tag \
             --title "damageio ${MOD_VERSION}" \
             --notes "Breaking change: mod and firmware must both be upgraded. The 9600-baud protocol now sends two bytes [channel 0=P1 or 1=P2, target level 0-50] and uses completion/rejection ACKs. Minecraft controls P1 only. P2 relay inputs use D8 (+) and D9 (-); P1 keeps D10 (+) and D12 (-). Levels reset when the Arduino resets. Four-relay hardware has not been validated on a physical device. Install the mod jar with Minecraft 1.21.8, Fabric Loader, Fabric API, and Java 21. The jar includes jSerialComm. Flash the .hex firmware on an ATmega328P separately with avrdude."
