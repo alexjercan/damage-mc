@@ -1,13 +1,21 @@
 # DamageIO
 
-An Arduino firmware and game integrations that control a two-channel device
-using relays across its existing + and - buttons. See [relay wiring](docs/relay-wiring.md)
+Shared Arduino firmware and game integrations for a two-channel device. Relays
+operate its existing + and - buttons. Read the [relay wiring guide](docs/relay-wiring.md)
 before connecting hardware.
 
+## Games
+
 - [Minecraft](minecraft/README.md): Fabric client mod for Minecraft 1.21.8.
-  Minecraft uses P1 only.
-- [FIFA / EA Sports FC](fifa/README.md): screen-score OCR dry run. It does not
-  send serial commands or activate relays.
+  Health loss controls P1; P2 remains available for other games. See its
+  README for installation, commands, and build steps.
+- [FIFA / EA Sports FC](fifa/README.md): PC screen-score OCR tools. `play.py`
+  sends a level to the opposing player's channel after a confirmed goal;
+  `score_ocr.py` logs scores without sending serial commands. See its README
+  for setup, configuration, and limitations. Goal detection is experimental.
+
+Run only one serial client at a time. Each game needs the shared v2 firmware;
+see its instructions below.
 
 ## Shared firmware
 
