@@ -1,52 +1,40 @@
-# Arduino and two-relay button wiring
+# Arduino and four-relay button wiring
 
-[Open the illustrated HTML/SVG diagram](relay-wiring.html).
+[Open the illustrated P1 wiring diagram](relay-wiring.html). P2 uses the same
+button-contact pattern with a second two-relay module.
 
-This diagram shows the current `main.c` wiring for an ATmega328P Arduino
-(such as an Uno or classic Nano). The two relays act as normally open switches
-in parallel with the device's existing `+` and `-` buttons. The device uses
-its own power source; the Arduino does not supply power to the device.
+This wiring is for an ATmega328P Arduino (Uno or classic Nano) and two
+active-low two-relay modules. Each relay's normally open COM/NO contacts bridge
+one button. The device has its own power source; it does not connect to the
+Arduino's 5V or GND.
 
-```text
-                     USB / serial
-Computer ------------------ Arduino (ATmega328P)
-                              5V  ------------------ VCC  Two-relay module
-                              GND ------------------ GND
-                              D10 (PB2, +) -------- IN1  Relay 1
-                              D12 (PB4, -) -------- IN2  Relay 2
+| Device button | Arduino pin | Relay module input | Relay contacts |
+| --- | --- | --- | --- |
+| P1 + | D10 (PB2) | First module IN1 | Across P1 + button |
+| P1 - | D12 (PB4) | First module IN2 | Across P1 - button |
+| P2 + | D8 (PB0) | Second module IN1 | Across P2 + button |
+| P2 - | D9 (PB1) | Second module IN2 | Across P2 - button |
 
-Device (own power source; no connection to Arduino power or ground)
-
-  + button, side A  o----[ existing + button ]----o  + button, side B
-                     |                             |
-                     +---- COM  Relay 1  NO --------+
-                                  (open at rest)
-                        Relay 1 NC: not connected
-
-  - button, side A  o----[ existing - button ]----o  - button, side B
-                     |                             |
-                     +---- COM  Relay 2  NO --------+
-                                  (open at rest)
-                        Relay 2 NC: not connected
-```
+With the JD-VCC/VCC jumper installed on each **5V-rated** module, connect both
+modules' VCC pins to Arduino 5V and both GND pins to Arduino GND, in parallel.
+JD-VCC supplies the relay coils; its jumper joins JD-VCC to VCC. These pins
+are not a series-power connector. Check the module's own pinout and the
+Arduino/USB supply current capacity before wiring. Do not power the coils
+from GPIO pins. Removing the jumper to use a separate coil supply requires
+checking that specific module's isolation and ground arrangement first.
 
 Each relay's COM/NO contact pair bridges the **two opposite electrical sides**
 of one existing button when the relay energizes. A four-leg tactile button
-usually has two legs already connected on each side. The two wires for that
-button go to opposite sides, not to the two legs that are already connected.
-Confirm the sides with a continuity meter while the device is unpowered.
-COM and NO can be swapped within a contact pair. Keep the two button circuits
-separate; do not connect their contacts to Arduino 5V or GND.
+usually has two legs already connected on each side. Confirm the sides with a
+continuity meter while the device is unpowered. COM and NO can be swapped
+within a contact pair. Do not use NC. Keep the four button circuits separate.
 
-The relay module used here has **active-low inputs**: HIGH is off and LOW turns
-a relay on. `main.c` holds D10 and D12 HIGH at idle and pulls one LOW for each
-press. Each press lasts 100 ms. The gap between repeated presses and between
-cycles is 50 ms. The delay from the last `+` release to the first `-` press
-defaults to 1000 ms and can be changed with `/damageio pulse <milliseconds>`.
-Level `L` means `L` separate `+` presses and `L` separate `-` presses per cycle.
-
-Opening the serial port can reset the Arduino. During reset, its output pins
-are not controlled by `main.c`; test for unexpected relay clicks with the
-device disconnected. D13 is deliberately unused because its onboard LED and
-bootloader activity can toggle that pin. Verify your module's VCC rating and
-COM/NO/NC terminal labels rather than relying on terminal position.
+The module inputs are active-low: HIGH is off, LOW energizes a relay. Firmware
+holds all four inputs HIGH at idle and drives only one LOW at a time. Each
+press lasts 75 ms, with a 25 ms gap between repeated presses. Levels for P1
+and P2 are tracked separately in RAM. Opening the serial port can reset the
+Arduino and reset its remembered levels to zero even if the device has not
+changed level. Return both channels to zero before closing the connection.
+During reset, firmware does not control the output pins: test for unexpected
+clicks with the device disconnected. D13 is unused because its LED and
+bootloader activity can toggle that pin.

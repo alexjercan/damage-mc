@@ -7,8 +7,8 @@ One health point is half a heart; fractional losses accumulate.
 ### Quickstart
 
 Build the C code and flash it to the Arduino and then run the mod in Minecraft.
-See [relay wiring](docs/relay-wiring.md) for the Arduino, relay module, and
-button-contact schematic.
+See [relay wiring](docs/relay-wiring.md) for the Arduino, two relay modules,
+and button contacts.
 
 ```console
 nix develop --show-trace --command fish
@@ -34,10 +34,12 @@ Changing modes cancels queued damage and returns to zero after any in-flight
 target completes. Closing the port waits for the active cycle to return to zero.
 
 The new firmware protocol is not compatible with older releases. At 9600 baud
-Java sends one binary byte, an absolute level from 0 to 50. The Arduino sends
-one byte back: `0` after the target is reached (after the last button release),
-or `1` if it rejects an invalid target or its seven-entry queue is full. Only
-one target is outstanding at a time. The mod starts its hold timer after the
+each command is two binary bytes: channel `0` (P1) or `1` (P2), followed by an
+absolute level from 0 to 50. The Arduino tracks each channel separately and
+sends one byte back: `0` after the target is reached (after the last button
+release), or `1` if it rejects an invalid command or its seven-entry queue is
+full. Only one target is outstanding at a time. Minecraft uses P1 only; P2 is
+reserved for other games. The mod starts its hold timer after the
 ACK, and reports missing ACKs as a connection error. The board assumes its
 physical level is zero at startup; resetting it while the device is at a
 nonzero level can lose position. A serial failure or forced game shutdown
@@ -51,8 +53,9 @@ this from the dev shell (it triggers the relay):
 python3 smoke_test.py /dev/ttyACM0
 ```
 
-At the prompt, enter absolute target levels (0-50). The script keeps one
-connection open, sends one byte per line, and prints each ACK. Enter `0` to
-return to zero before exiting with Ctrl+C or EOF. Opening the port again can
-reset the Arduino and lose its position; a later `0` in a new session may not
-undo the previous nonzero level.
+At the prompt, enter a channel and an absolute target level, such as `0 20`
+for P1 or `1 20` for P2. The script keeps one connection open, sends one
+command per line, and prints each ACK. Enter `0 0` and `1 0` to return both
+channels to zero before exiting with Ctrl+C or EOF. Opening the port again can
+reset the Arduino and lose its position; a later zero in a new session may not
+undo a previous nonzero level.

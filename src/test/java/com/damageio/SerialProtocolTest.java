@@ -10,13 +10,15 @@ import org.junit.jupiter.api.Test;
 
 class SerialProtocolTest {
     @Test
-    void targetsAreSingleBytesIncludingZero() throws IOException {
+    void targetsAreTwoBytesIncludingZero() throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        SerialProtocol.writeTarget(output, 0);
-        SerialProtocol.writeTarget(output, 50);
-        assertArrayEquals(new byte[] {0, 50}, output.toByteArray());
-        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writeTarget(output, -1));
-        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writeTarget(output, 51));
+        SerialProtocol.writeTarget(output, 0, 50);
+        SerialProtocol.writeTarget(output, 1, 0);
+        assertArrayEquals(new byte[] {0, 50, 1, 0}, output.toByteArray());
+        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writeTarget(output, -1, 5));
+        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writeTarget(output, 2, 5));
+        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writeTarget(output, 0, -1));
+        assertThrows(IllegalArgumentException.class, () -> SerialProtocol.writeTarget(output, 1, 51));
     }
 
     @Test
@@ -27,6 +29,6 @@ class SerialProtocolTest {
                 throw new IOException("disconnected");
             }
         };
-        assertThrows(IOException.class, () -> SerialProtocol.writeTarget(broken, 5));
+        assertThrows(IOException.class, () -> SerialProtocol.writeTarget(broken, 0, 5));
     }
 }

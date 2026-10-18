@@ -141,7 +141,7 @@ public class DamageIOModClient implements ClientModInitializer {
 
             if (now >= readyAt) {
                 Integer target = sequencer.nextTarget(now);
-                if (target != null) SerialProtocol.writeTarget(output, target);
+                if (target != null) SerialProtocol.writeTarget(output, 0, target); // Minecraft uses P1 only.
             }
             if (closing && sequencer.isIdle()) closePort();
         } catch (IOException | IllegalStateException e) {
