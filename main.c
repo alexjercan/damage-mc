@@ -30,8 +30,8 @@ typedef struct {
 #define PROPORTIONAL_QUEUE_SIZE 64U
 
 // TODO: Constants that need to be fine tuned for each device
-#define PRESS_MS 100UL
-#define BETWEEN_PRESSES_MS 50UL
+#define PRESS_MS 50UL
+#define BETWEEN_PRESSES_MS 20UL
 
 // NOTE: The configurable parameters of the mod: level (presses per cycle) and the delay between level and stop
 volatile uint8_t presses_per_cycle = 1;
