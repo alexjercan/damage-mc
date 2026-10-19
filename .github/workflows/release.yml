@@ -2,12 +2,68 @@ name: release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  fifa:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux-x86_64
+          - runner: windows-2022
+            platform: windows-x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: install Python build dependencies
+        run: python -m pip install -r fifa/requirements-build.txt
+      - name: install Tesseract on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr-eng
+      - name: install Tesseract on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install tesseract --yes --no-progress
+          $exe = 'C:\Program Files\Tesseract-OCR\tesseract.exe'
+          if (-not (Test-Path $exe)) { throw "Tesseract not found at $exe" }
+          "TESSERACT_EXE=$exe" >> $env:GITHUB_ENV
+      - name: run FIFA tests and build bundle
+        run: |
+          python -m unittest discover -s fifa -p 'test_*.py'
+          python fifa/build_bundle.py
+      - name: verify packaged OCR without hardware
+        if: runner.os == 'Linux'
+        run: |
+          fifa/dist/damageio-fifa/damageio-fifa --help
+          fifa/dist/damageio-fifa/damageio-fifa --check-ocr
+          tar -czf "damageio-fifa-${GITHUB_REF_NAME}-linux-x86_64.tar.gz" -C fifa/dist damageio-fifa
+      - name: verify packaged OCR without hardware (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & fifa/dist/damageio-fifa/damageio-fifa.exe --help
+          & fifa/dist/damageio-fifa/damageio-fifa.exe --check-ocr
+          Compress-Archive -Path fifa/dist/damageio-fifa -DestinationPath "damageio-fifa-$env:GITHUB_REF_NAME-windows-x86_64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fifa-${{ matrix.platform }}
+          path: damageio-fifa-${{ github.ref_name }}-${{ matrix.platform }}.*
+          if-no-files-found: error
+          retention-days: 7
+
   release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: fifa
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -40,6 +96,11 @@ jobs:
         run: |
           make main.hex
           cp main.hex "minecraft/build/libs/damageio-atmega328p-${MOD_VERSION}.hex"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fifa-*
+          path: fifa-artifacts
+          merge-multiple: true
       - name: publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -47,6 +108,8 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             "minecraft/build/libs/damageio-${MOD_VERSION}.jar" \
             "minecraft/build/libs/damageio-atmega328p-${MOD_VERSION}.hex" \
+            "fifa-artifacts/damageio-fifa-${GITHUB_REF_NAME}-linux-x86_64.tar.gz" \
+            "fifa-artifacts/damageio-fifa-${GITHUB_REF_NAME}-windows-x86_64.zip" \
             --verify-tag \
             --title "damageio ${MOD_VERSION}" \
-            --notes "Breaking change: mod and firmware must both be upgraded. The 9600-baud protocol now sends two bytes [channel 0=P1 or 1=P2, target level 0-50] and uses completion/rejection ACKs. Minecraft controls P1 only. P2 relay inputs use D8 (+) and D9 (-); P1 keeps D10 (+) and D12 (-). Levels reset when the Arduino resets. Four-relay hardware has not been validated on a physical device. Install the mod jar with Minecraft 1.21.8, Fabric Loader, Fabric API, and Java 21. The jar includes jSerialComm. Flash the .hex firmware on an ATmega328P separately with avrdude."
+            --notes "Includes the Minecraft 1.21.8 Fabric mod, shared ATmega328P two-channel firmware, and FIFA Linux/Windows CLI bundles with Tesseract. Extract the FIFA archive and run damageio-fifa --dry-run to inspect scores without serial I/O, or pass a serial port for live mode. Only one serial client can run at a time. The device's physical level must be zero before opening the serial port; Arduino resets lose level tracking. FIFA OCR and four-relay operation have not been validated on live hardware. See the game READMEs for installation and limitations."

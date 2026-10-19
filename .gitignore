@@ -43,6 +43,7 @@ replay_*.log
 
 __pycache__/
 *.py[cod]
+fifa/dist/
 
 # Arduino stuff
 compile_flags.txt

@@ -6,7 +6,7 @@ from unittest.mock import patch
 from PIL import Image
 
 from score_ocr import (crop_rectangle, find_digit_pairs, parse_score,
-                           positive_seconds, sample)
+                           positive_seconds, sample, tesseract_command)
 
 
 class FakeFrame:
@@ -28,6 +28,22 @@ class FakeCapture:
 
 
 class ScoreOcrTests(unittest.TestCase):
+    def test_bundle_uses_its_own_ocr_engine_and_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "tesseract").touch()
+            (root / "tessdata").mkdir()
+            (root / "tessdata" / "eng.traineddata").touch()
+            with patch("score_ocr.sys.frozen", True, create=True), \
+                 patch("score_ocr.sys._MEIPASS", directory, create=True), \
+                 patch("score_ocr.sys.platform", "linux"):
+                executable, environment = tesseract_command()
+                self.assertEqual(executable, str(root / "tesseract"))
+                self.assertEqual(environment["TESSDATA_PREFIX"], str(root / "tessdata"))
+                (root / "tesseract").unlink()
+                with self.assertRaises(RuntimeError):
+                    tesseract_command()
+
     def test_crop_uses_monitor_origin_and_validates_bounds(self):
         monitor = {"left": 1920, "top": -100, "width": 1000, "height": 500}
         self.assertEqual(crop_rectangle(monitor, (10, 20, 200, 80)),

@@ -8,9 +8,10 @@ from pathlib import Path
 import signal
 import shutil
 import subprocess
+import sys
 import time
 
-from score_ocr import crop_rectangle, positive_seconds, sample
+from score_ocr import crop_rectangle, positive_seconds, read_crop, sample
 
 
 class ScoreTracker:
@@ -83,6 +84,8 @@ def main(argv=None):
     parser.add_argument("port", nargs="?", help="Arduino serial port, e.g. /dev/ttyACM0 (omit with -n)")
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="log OCR and confirmed goals without opening a serial port")
+    parser.add_argument("--check-ocr", action="store_true",
+                        help="test Tesseract without screen capture or serial I/O, then exit")
     parser.add_argument("--pulse", type=pulse_milliseconds, default=1000,
                         help="milliseconds at level after ACK (default: 1000)")
     parser.add_argument("--level", type=int, default=25,
@@ -105,11 +108,21 @@ def main(argv=None):
                         help="directory for crops and readings.jsonl (default: run/fifa-play or run/fifa-ocr)")
     parser.add_argument("--save-all", action="store_true", help="save each capture, not just latest.png")
     args = parser.parse_args(argv)
-    if args.dry_run:
+    if args.dry_run or args.check_ocr:
         if args.port is not None:
-            parser.error("omit the serial port with --dry-run")
+            parser.error("omit the serial port with --dry-run or --check-ocr")
     elif args.port is None:
-        parser.error("a serial port is required unless --dry-run is set")
+        parser.error("a serial port is required unless --dry-run or --check-ocr is set")
+    if args.check_ocr and args.dry_run:
+        parser.error("--check-ocr and --dry-run cannot be combined")
+    if args.check_ocr:
+        try:
+            from PIL import Image
+            read_crop(Image.new("RGB", (80, 40), "white"))
+        except (ImportError, subprocess.CalledProcessError, OSError, RuntimeError) as error:
+            parser.exit(1, f"OCR check failed: {error}\n")
+        print("OCR engine and English data are available.")
+        return
     if not args.dry_run and (args.once or args.raw_ocr):
         parser.error("--once and --raw-ocr require --dry-run")
     if args.raw_ocr and args.score_crop is not None:
@@ -120,7 +133,7 @@ def main(argv=None):
         parser.error("--level must be between 1 and 50")
     if sorted((args.top_channel, args.bottom_channel)) != [0, 1]:
         parser.error("top and bottom channels must be different and each be 0 or 1")
-    if shutil.which("tesseract") is None:
+    if not getattr(sys, "frozen", False) and shutil.which("tesseract") is None:
         parser.error("tesseract is required; use the project nix dev shell")
     try:
         import mss

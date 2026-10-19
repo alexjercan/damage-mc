@@ -11,20 +11,35 @@ FC 26 footage, but not validated with live relay hardware or every HUD layout.
 1. Set up the [shared firmware](../README.md#shared-firmware) and
    [relay wiring](../docs/relay-wiring.md). Use firmware with the two-channel
    v2 serial protocol. Close other serial clients, including Minecraft.
-2. On the PC that displays the game, install Python 3, Tesseract, `mss`,
-   Pillow, and `pyserial` (the latter is needed only for live mode). The
-   repository's Nix shell provides these tools:
+2. For a release build, download the FIFA archive for your PC from the
+   [releases](https://github.com/alexjercan/damage-mc/releases) and extract
+   the **whole** archive. Linux builds target x86-64 Ubuntu 24.04 and newer
+   compatible distributions; Windows builds target x86-64 Windows. Run from a
+   terminal in the extracted directory:
+
+   ```fish
+   ./damageio-fifa --check-ocr             # Linux
+   ./damageio-fifa --dry-run --save-all    # Linux, no Arduino needed
+   # On Windows (fish):
+   ./damageio-fifa.exe --check-ocr
+   ./damageio-fifa.exe --dry-run --save-all
+   ```
+
+   The bundle includes Python, its packages, Tesseract, and English OCR data.
+   You do not need to install them separately. These bundles are built by the
+   tag release workflow; older releases may not have them.
+
+   To run from source instead, install Python 3, Tesseract (with English data),
+   `mss`, Pillow, and `pyserial` (only for live mode). The Nix shell provides
+   these tools:
 
    ```fish
    nix develop --command fish
+   python3 fifa/play.py --dry-run --save-all
    ```
 
 3. Make sure the game and its top-left score HUD appear in screen captures.
-   Test OCR first, with no device connected:
-
-   ```fish
-   python3 fifa/play.py --dry-run --interval 1 --crop 0 0 600 180 --save-all
-   ```
+   Test OCR first, with no device connected, using `--dry-run`.
 
    Check `run/fifa-ocr/latest.png` or the saved crops and the printed `score`.
    If the crop shows a desktop, terminal, or black screen instead of the HUD,
@@ -38,11 +53,15 @@ serial port can reset the Arduino's level counters, but it cannot reset or
 read the physical device position. Test with relays disconnected first.
 Dry-run does not open the port or require a connected Arduino.
 
-From the repository root, in the Nix shell:
+For a Linux release bundle, from the extracted directory:
 
 ```fish
-python3 fifa/play.py /dev/ttyACM0 --pulse 1000 --interval 0.5 --save-all
+./damageio-fifa /dev/ttyACM0 --pulse 1000 --interval 0.5 --save-all
 ```
+
+For a Windows release bundle, use `./damageio-fifa.exe COM3 --pulse 1000`
+from a fish terminal and replace `COM3` with your Arduino port. From source,
+run `python3 fifa/play.py` instead of the executable.
 
 Replace `/dev/ttyACM0` with your Arduino serial port (for example,
 `/dev/ttyUSB0`). The default captured region is `--crop 0 0 600 180`. Top

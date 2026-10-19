@@ -3,8 +3,11 @@
 import argparse
 import io
 import math
+import os
 import re
 import subprocess
+import sys
+from pathlib import Path
 from datetime import datetime, timezone
 
 
@@ -34,6 +37,17 @@ def crop_rectangle(monitor, crop):
             "width": width, "height": height}
 
 
+def tesseract_command():
+    """Use the bundled OCR engine and data when running from a frozen bundle."""
+    if getattr(sys, "frozen", False):
+        bundle = Path(sys._MEIPASS)
+        executable = bundle / ("tesseract.exe" if sys.platform == "win32" else "tesseract")
+        if not executable.is_file() or not (bundle / "tessdata" / "eng.traineddata").is_file():
+            raise RuntimeError("bundled Tesseract or English OCR data is missing")
+        return str(executable), {**os.environ, "TESSDATA_PREFIX": str(bundle / "tessdata")}
+    return "tesseract", None
+
+
 def read_crop(image, score=False):
     from PIL import ImageOps
 
@@ -47,10 +61,12 @@ def read_crop(image, score=False):
     enhanced = enhanced.resize((enhanced.width * scale, enhanced.height * scale))
     data = io.BytesIO()
     enhanced.save(data, format="PNG")
-    command = ["tesseract", "stdin", "stdout", "--psm", "10" if score else "6"]
+    executable, environment = tesseract_command()
+    command = [executable, "stdin", "stdout", "--psm", "10" if score else "6"]
     if score:
         command.extend(["-c", "tessedit_char_whitelist=0123456789"])
-    result = subprocess.run(command, input=data.getvalue(), capture_output=True, check=True)
+    result = subprocess.run(command, input=data.getvalue(), capture_output=True,
+                            check=True, env=environment)
     return result.stdout.decode("utf-8", errors="replace").strip()
 
 
