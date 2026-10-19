@@ -1,7 +1,12 @@
+import io
+import sys
+import tempfile
+import types
 import unittest
+from contextlib import redirect_stdout, redirect_stderr
 from unittest.mock import patch
 
-from play import ScoreTracker, pulse_channel, pulse_milliseconds, send_target
+from play import ScoreTracker, main, pulse_channel, pulse_milliseconds, send_target
 
 
 class FakeSerial:
@@ -65,6 +70,36 @@ class PlayTests(unittest.TestCase):
         with patch("play.time.sleep"):
             with self.assertRaises(RuntimeError):
                 send_target(FakeSerial([b"\x01"] * 3), 0, 25)
+
+    def test_dry_run_never_imports_serial_or_sends_targets(self):
+        class FakeCapture:
+            monitors = [None, {"left": 0, "top": 0, "width": 800, "height": 600}]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            fake_mss = types.SimpleNamespace(mss=FakeCapture)
+            entry = {"score": [0, 0], "score_ocr": "0\\n0"}
+            with patch.dict(sys.modules, {"mss": fake_mss, "serial": None}):
+                with patch("play.shutil.which", return_value="tesseract"):
+                    with patch("play.sample", return_value=entry) as sampled:
+                        with patch("play.pulse_channel") as pulse:
+                            with redirect_stdout(io.StringIO()):
+                                main(["-n", "--once", "--output-dir", directory])
+            self.assertEqual(sampled.call_count, 1)
+            pulse.assert_not_called()
+
+    def test_port_required_only_for_live_mode(self):
+        for argv in ([], ["--dry-run", "/dev/ttyUSB0"], ["--once", "/dev/ttyUSB0"],
+                     ["--raw-ocr", "/dev/ttyUSB0"]):
+            with self.subTest(argv=argv), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    main(argv)
+                self.assertEqual(raised.exception.code, 2)
 
     def test_pulse_milliseconds_validation(self):
         self.assertEqual(pulse_milliseconds("2500"), 2500)

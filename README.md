@@ -9,10 +9,10 @@ before connecting hardware.
 - [Minecraft](minecraft/README.md): Fabric client mod for Minecraft 1.21.8.
   Health loss controls P1; P2 remains available for other games. See its
   README for installation, commands, and build steps.
-- [FIFA / EA Sports FC](fifa/README.md): PC screen-score OCR tools. `play.py`
+- [FIFA / EA Sports FC](fifa/README.md): PC screen-score controller. `play.py`
   sends a level to the opposing player's channel after a confirmed goal;
-  `score_ocr.py` logs scores without sending serial commands. See its README
-  for setup, configuration, and limitations. Goal detection is experimental.
+  `play.py --dry-run` logs scores without serial I/O. See its README for setup,
+  configuration, and limitations. Goal detection is experimental.
 
 Run only one serial client at a time. Each game needs the shared v2 firmware;
 see its instructions below.

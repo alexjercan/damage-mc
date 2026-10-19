@@ -1,15 +1,10 @@
-#!/usr/bin/env python3
-"""Capture the top-left HUD and log tentative scores. No serial I/O."""
+"""Screen capture and OCR helpers for the FIFA controller."""
 
 import argparse
 import io
-import json
 import math
 import re
-from pathlib import Path
-import shutil
 import subprocess
-import time
 from datetime import datetime, timezone
 
 
@@ -159,72 +154,3 @@ def sample(sct, rectangle, output_dir, save_all=False, score_crop=None, raw_ocr=
             entry["digit_boxes"] = None
         # This is only an OCR candidate, not a verified goal or a relay command.
     return entry
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--interval", type=positive_seconds, default=1.0,
-                        help="seconds between captures (default: 1)")
-    parser.add_argument("--monitor", type=int, default=1,
-                        help="mss monitor index, starting at 1 (default: 1)")
-    parser.add_argument("--crop", type=int, nargs=4, metavar=("X", "Y", "WIDTH", "HEIGHT"),
-                        help="crop in pixels relative to selected monitor; default: top-left 35%% x 18%%")
-    parser.add_argument("--score-crop", type=int, nargs=4, metavar=("X", "Y", "WIDTH", "HEIGHT"),
-                        help="override automatic digit detection with a manual score crop")
-    parser.add_argument("--raw-ocr", action="store_true",
-                        help="OCR the whole captured image as text instead of detecting a score")
-    parser.add_argument("--output-dir", type=Path, default=Path("run/fifa-ocr"),
-                        help="directory for crops and readings.jsonl (default: run/fifa-ocr)")
-    parser.add_argument("--save-all", action="store_true",
-                        help="save every crop instead of overwriting latest.png (can use much disk space)")
-    parser.add_argument("--once", action="store_true", help="take one sample and exit")
-    args = parser.parse_args()
-
-    if args.raw_ocr and args.score_crop is not None:
-        parser.error("--raw-ocr and --score-crop cannot be combined")
-    if shutil.which("tesseract") is None:
-        parser.error("tesseract is required; use the project nix dev shell")
-    try:
-        import mss
-        import PIL  # noqa: F401 - check dependency before entering capture loop
-    except ImportError:
-        parser.error("mss and Pillow are required; use the project nix dev shell")
-
-    try:
-        with mss.mss() as sct:
-            if args.monitor < 1 or args.monitor >= len(sct.monitors):
-                parser.error(f"monitor must be between 1 and {len(sct.monitors) - 1}")
-            rectangle = crop_rectangle(sct.monitors[args.monitor], args.crop)
-            if args.score_crop is not None:
-                try:
-                    crop_rectangle({"left": 0, "top": 0, "width": rectangle["width"],
-                                    "height": rectangle["height"]}, args.score_crop)
-                    if args.score_crop[2] <= 6 or args.score_crop[3] <= 10:
-                        raise ValueError("score crop must be wider than 6 and taller than 10 pixels")
-                except ValueError as error:
-                    parser.error(f"score crop: {error}")
-            args.output_dir.mkdir(parents=True, exist_ok=True)
-            print(f"Capturing monitor {args.monitor} at {rectangle}; press Ctrl+C to stop", flush=True)
-            with (args.output_dir / "readings.jsonl").open("a", encoding="utf-8") as log:
-                next_sample = time.monotonic()
-                while True:
-                    entry = sample(sct, rectangle, args.output_dir, args.save_all,
-                                   args.score_crop, args.raw_ocr)
-                    line = json.dumps(entry, ensure_ascii=False)
-                    print(line, flush=True)
-                    log.write(line + "\n")
-                    log.flush()
-                    if args.once:
-                        break
-                    next_sample = max(next_sample + args.interval, time.monotonic())
-                    time.sleep(max(0, next_sample - time.monotonic()))
-    except ValueError as error:
-        parser.error(str(error))
-    except (subprocess.CalledProcessError, OSError) as error:
-        parser.exit(1, f"capture/OCR failed: {error}\n")
-    except KeyboardInterrupt:
-        print("\nStopped")
-
-
-if __name__ == "__main__":
-    main()

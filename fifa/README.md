@@ -1,9 +1,9 @@
 # FIFA / EA Sports FC DamageIO controller
 
-Python tools for EA Sports FC on a PC. `play.py` reads the on-screen score and
-sends a level to the *opposing* player's Arduino channel after a confirmed
-goal. `score_ocr.py` lets you inspect OCR results without using the Arduino.
-Both tools use screen capture, not a game mod. They were tested against saved
+A Python controller for EA Sports FC on a PC. `play.py` reads the on-screen
+score and sends a level to the *opposing* player's Arduino channel after a
+confirmed goal. Use `-n` or `--dry-run` to inspect scores and confirmed goals
+without opening a serial port. It uses screen capture, not a game mod. It was tested against saved
 FC 26 footage, but not validated with live relay hardware or every HUD layout.
 
 ## Install
@@ -12,7 +12,8 @@ FC 26 footage, but not validated with live relay hardware or every HUD layout.
    [relay wiring](../docs/relay-wiring.md). Use firmware with the two-channel
    v2 serial protocol. Close other serial clients, including Minecraft.
 2. On the PC that displays the game, install Python 3, Tesseract, `mss`,
-   Pillow, and `pyserial`. The repository's Nix shell provides these tools:
+   Pillow, and `pyserial` (the latter is needed only for live mode). The
+   repository's Nix shell provides these tools:
 
    ```fish
    nix develop --command fish
@@ -22,7 +23,7 @@ FC 26 footage, but not validated with live relay hardware or every HUD layout.
    Test OCR first, with no device connected:
 
    ```fish
-   python3 fifa/score_ocr.py --interval 1 --crop 0 0 600 180 --save-all
+   python3 fifa/play.py --dry-run --interval 1 --crop 0 0 600 180 --save-all
    ```
 
    Check `run/fifa-ocr/latest.png` or the saved crops and the printed `score`.
@@ -32,9 +33,10 @@ FC 26 footage, but not validated with live relay hardware or every HUD layout.
 
 ## Run and configure
 
-**Only start `play.py` when both physical device levels are 0.** Opening the
+**Only start live mode when both physical device levels are 0.** Opening the
 serial port can reset the Arduino's level counters, but it cannot reset or
 read the physical device position. Test with relays disconnected first.
+Dry-run does not open the port or require a connected Arduino.
 
 From the repository root, in the Nix shell:
 
@@ -71,15 +73,18 @@ unknown; inspect the device before reconnecting.
 
 ## Inspect and troubleshoot OCR
 
-`score_ocr.py` prints a JSON record for each frame and writes the same records
-to `run/fifa-ocr/readings.jsonl`. Its default crop is the top-left 35% of the
-screen width and 18% of its height. Each record includes `score_ocr`, a
-*tentative* `score` (top, bottom), and `digit_boxes` within the captured crop.
+`play.py --dry-run` prints a JSON record for each frame and writes the same
+records to `run/fifa-ocr/readings.jsonl`. The default crop for both modes is
+`0 0 600 180`; adjust it with `--crop X Y WIDTH HEIGHT`. Each record includes
+`score_ocr`, a *tentative* `score` (top, bottom), and `digit_boxes` within the
+captured crop. `confirmed_score` and `goal` use the same rules as live mode,
+but dry-run never opens a serial port or activates relays.
 Unreadable or hidden score digits produce `score: null`. Without `--save-all`,
 `latest.png` is overwritten for each sample; `--save-all` can use much disk
-space. Use `--once` for one frame, `--output-dir` to change the log location,
-`--score-crop X Y WIDTH HEIGHT` for manual debugging, or `--raw-ocr` to read
-the whole crop as text. The live controller writes similar logs under
+space. Use `--once` for one frame (dry-run only), `--output-dir` to change the
+log location, `--score-crop X Y WIDTH HEIGHT` for manual debugging, or
+`--raw-ocr` to read the whole crop as text (dry-run only; no goal detection).
+The live controller writes similar logs under
 `run/fifa-play/`.
 
 OCR assumes two vertically aligned dark score digits on a light panel. New
