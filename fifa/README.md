@@ -38,7 +38,19 @@ FC 26 footage, but not validated with live relay hardware or every HUD layout.
    python3 fifa/play.py --dry-run --save-all
    ```
 
-3. Make sure the game and its top-left score HUD appear in screen captures.
+3. Find the capture screen and serial port before running live mode:
+
+   ```fish
+   python3 fifa/play.py --list-monitors   # Or: --monitor with no index
+   python3 fifa/play.py --list-ports      # Also shown when live mode has no port
+   # For the release bundle, replace python3 fifa/play.py with ./damageio-fifa
+   ```
+
+   Monitor indices start at 1. The port list shows system serial devices, not
+   just Arduinos; check the description and choose the correct port. These
+   commands only list devices and exit. They do not send serial commands.
+
+4. Make sure the game and its top-left score HUD appear in screen captures.
    Test OCR first, with no device connected, using `--dry-run`.
 
    Check `run/fifa-ocr/latest.png` or the saved crops and the printed `score`.
@@ -74,7 +86,9 @@ team activates P2, and a goal for the bottom team activates P1. Settings:
 --top-channel 0              Device channel assigned to the top team (0 or 1)
 --bottom-channel 1           Device channel assigned to the bottom team (0 or 1)
 --interval 0.5               Seconds between captures
---monitor 1                  Screen index, starting at 1
+--monitor 1                  Screen index, starting at 1 (omit index to list screens)
+--list-monitors              List screens and exit
+--list-ports                 List serial ports and exit
 --crop 0 0 600 180           HUD region in pixels relative to that screen
 --output-dir run/fifa-play   Crop and JSONL log directory
 --save-all                   Keep each crop instead of replacing latest.png

@@ -131,7 +131,11 @@ def find_digit_pairs(image):
 
 def read_digit(image, box):
     x1, y1, x2, y2 = box
-    return read_crop(image.crop((x1 - 8, y1 - 6, x2 + 8, y2 + 2)), score=True)
+    digit = read_crop(image.crop((x1 - 8, y1 - 6, x2 + 8, y2 + 2)), score=True)
+    if re.fullmatch(r"[0-9]{1,2}", digit):
+        return digit
+    # A wide crop can include nearby team text and make a valid digit unreadable.
+    return read_crop(image.crop((x1 - 2, y1 - 6, x2 + 4, y2 + 2)), score=True)
 
 
 def sample(sct, rectangle, output_dir, save_all=False, score_crop=None, raw_ocr=False):

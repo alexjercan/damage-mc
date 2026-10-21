@@ -10,10 +10,10 @@ Arduino's 5V or GND.
 
 | Device button | Arduino pin | Relay module input | Relay contacts |
 | --- | --- | --- | --- |
-| P1 + | D10 (PB2) | First module IN1 | Across P1 + button |
-| P1 - | D12 (PB4) | First module IN2 | Across P1 - button |
-| P2 + | D8 (PB0) | Second module IN1 | Across P2 + button |
-| P2 - | D9 (PB1) | Second module IN2 | Across P2 - button |
+| P1 + | D8 (PB0) | First module IN1 | Across P1 + button |
+| P1 - | D9 (PB1) | First module IN2 | Across P1 - button |
+| P2 + | D10 (PB2) | Second module IN1 | Across P2 + button |
+| P2 - | D11 (PB3) | Second module IN2 | Across P2 - button |
 
 With the JD-VCC/VCC jumper installed on each **5V-rated** module, connect both
 modules' VCC pins to Arduino 5V and both GND pins to Arduino GND, in parallel.

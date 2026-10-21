@@ -79,9 +79,36 @@ def pulse_milliseconds(value):
     return milliseconds
 
 
+def list_monitors(parser):
+    try:
+        import mss
+        with mss.mss() as capture:
+            for index, monitor in enumerate(capture.monitors[1:], start=1):
+                print(f"{index}: {monitor['width']}x{monitor['height']} "
+                      f"at ({monitor['left']}, {monitor['top']})")
+            if len(capture.monitors) <= 1:
+                print("No monitors found.")
+    except (ImportError, OSError, RuntimeError) as error:
+        parser.exit(1, f"Cannot list monitors: {error}\n")
+
+
+def list_ports(parser):
+    try:
+        from serial.tools import list_ports as serial_ports
+        ports = sorted(serial_ports.comports(), key=lambda port: port.device)
+        for port in ports:
+            print(f"{port.device}: {port.description}")
+        if not ports:
+            print("No serial ports found. Connect the Arduino and try again.")
+    except (ImportError, OSError) as error:
+        parser.exit(1, f"Cannot list serial ports: {error}\n")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("port", nargs="?", help="Arduino serial port, e.g. /dev/ttyACM0 (omit with -n)")
+    parser.add_argument("port", nargs="?", help="Arduino serial port, e.g. /dev/ttyACM0 (omit with -n; omit in live mode to list ports)")
+    parser.add_argument("--list-ports", action="store_true", help="list serial ports and exit; no serial I/O")
+    parser.add_argument("--list-monitors", action="store_true", help="list capture monitors and exit")
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="log OCR and confirmed goals without opening a serial port")
     parser.add_argument("--check-ocr", action="store_true",
@@ -96,7 +123,8 @@ def main(argv=None):
                         help="bottom team device channel (default: 1=P2)")
     parser.add_argument("--interval", type=positive_seconds, default=0.5,
                         help="seconds between samples (default: 0.5)")
-    parser.add_argument("--monitor", type=int, default=1)
+    parser.add_argument("--monitor", type=int, nargs="?", const=0, default=1,
+                        help="screen index (default: 1); omit value to list monitors and exit")
     parser.add_argument("--crop", type=int, nargs=4, metavar=("X", "Y", "WIDTH", "HEIGHT"),
                         default=(0, 0, 600, 180), help="top-left HUD region (default: 0 0 600 180)")
     parser.add_argument("--score-crop", type=int, nargs=4, metavar=("X", "Y", "WIDTH", "HEIGHT"),
@@ -108,11 +136,19 @@ def main(argv=None):
                         help="directory for crops and readings.jsonl (default: run/fifa-play or run/fifa-ocr)")
     parser.add_argument("--save-all", action="store_true", help="save each capture, not just latest.png")
     args = parser.parse_args(argv)
+    if args.list_monitors or args.list_ports or args.monitor == 0:
+        if args.list_monitors or args.monitor == 0:
+            list_monitors(parser)
+        if args.list_ports:
+            list_ports(parser)
+        return
     if args.dry_run or args.check_ocr:
         if args.port is not None:
             parser.error("omit the serial port with --dry-run or --check-ocr")
     elif args.port is None:
-        parser.error("a serial port is required unless --dry-run or --check-ocr is set")
+        list_ports(parser)
+        print("Select a port and pass it as the first argument to run live mode.")
+        return
     if args.check_ocr and args.dry_run:
         parser.error("--check-ocr and --dry-run cannot be combined")
     if args.check_ocr:

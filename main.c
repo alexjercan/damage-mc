@@ -9,10 +9,10 @@
 #define MY_UBRR (F_CPU / 16UL / BAUD - 1UL)
 #define MAX_LEVEL 50U
 #define QUEUE_SIZE 8U
-#define P1_PLUS (1 << PB2)  // D10
-#define P1_MINUS (1 << PB4) // D12
-#define P2_PLUS (1 << PB0)  // D8
-#define P2_MINUS (1 << PB1) // D9
+#define P1_PLUS (1 << PB0)  // D8
+#define P1_MINUS (1 << PB1) // D9
+#define P2_PLUS (1 << PB2)  // D10
+#define P2_MINUS (1 << PB3) // D11
 #define BUTTON_MASK (P1_PLUS | P1_MINUS | P2_PLUS | P2_MINUS)
 
 // Tune to the button contacts on the device.

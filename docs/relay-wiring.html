@@ -40,11 +40,11 @@
 <main>
   <div class="eyebrow">Hardware reference</div>
   <h1>Arduino + P1 button contacts</h1>
-  <p>This diagram shows P1 on the first two-relay module. For P2, use a second module with the same contact wiring: D8 to IN1 (P2 +), D9 to IN2 (P2 -). See the <a href="relay-wiring.md">full four-relay wiring reference</a> before connecting power. The device has its own power source.</p>
+  <p>This diagram shows P1 on the first two-relay module. For P2, use a second module with the same contact wiring: D10 to IN1 (P2 +), D11 to IN2 (P2 -). See the <a href="relay-wiring.md">full four-relay wiring reference</a> before connecting power. The device has its own power source.</p>
   <div class="diagram">
     <svg viewBox="0 0 1240 810" role="img" aria-labelledby="diagram-title diagram-desc" xmlns="http://www.w3.org/2000/svg">
       <title id="diagram-title">DamageIO P1 Arduino and first two-relay module wiring</title>
-      <desc id="diagram-desc">Arduino 5V to relay VCC, GND to GND, D10 to IN1 for plus, and D12 to IN2 for minus. Relay 1 COM and NO connect across the device plus button; relay 2 COM and NO connect across the minus button. The device uses separate power. NC terminals are unused.</desc>
+      <desc id="diagram-desc">Arduino 5V to relay VCC, GND to GND, D8 to IN1 for plus, and D9 to IN2 for minus. Relay 1 COM and NO connect across the device plus button; relay 2 COM and NO connect across the minus button. The device uses separate power. NC terminals are unused.</desc>
       <defs>
         <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#30405a"/></pattern>
       </defs>
@@ -59,8 +59,8 @@
       <text class="small" x="65" y="415">Pins drive relay inputs only</text>
       <text class="label" x="238" y="274">5V</text>
       <text class="label" x="224" y="316">GND</text>
-      <text class="label" x="219" y="358">D10</text>
-      <text class="label" x="219" y="400">D12</text>
+      <text class="label" x="219" y="358">D8</text>
+      <text class="label" x="219" y="400">D9</text>
       <circle class="terminal" cx="326" cy="268" r="7"/>
       <circle class="terminal" cx="326" cy="310" r="7"/>
       <circle class="terminal" cx="326" cy="352" r="7"/>
@@ -72,8 +72,8 @@
       <path class="trace plus" d="M333 352 H440"/>
       <path class="trace minus" d="M333 394 H440"/>
       <text class="small" x="353" y="254">5 V</text>
-      <text class="small" x="353" y="339">PB2 / +</text>
-      <text class="small" x="353" y="381">PB4 / -</text>
+      <text class="small" x="353" y="339">PB0 / +</text>
+      <text class="small" x="353" y="381">PB1 / -</text>
 
       <!-- Two-channel relay module -->
       <rect class="card" x="440" y="105" width="320" height="630" rx="20"/>

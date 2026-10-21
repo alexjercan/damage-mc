@@ -6,7 +6,7 @@ from unittest.mock import patch
 from PIL import Image
 
 from score_ocr import (crop_rectangle, find_digit_pairs, parse_score,
-                           positive_seconds, sample, tesseract_command)
+                           positive_seconds, read_digit, sample, tesseract_command)
 
 
 class FakeFrame:
@@ -107,6 +107,16 @@ class ScoreOcrTests(unittest.TestCase):
                                         "width": 600, "height": 180}, Path(directory))
                     self.assertEqual(result["score"], [1, 3])
                     self.assertEqual(result["digit_boxes"], [list(box) for box in expected])
+
+    def test_unreadable_wide_digit_retries_with_tighter_crop(self):
+        image = Image.new("RGB", (100, 100), "white")
+        with patch("score_ocr.read_crop", side_effect=["", "0"]) as reader:
+            self.assertEqual(read_digit(image, (30, 40, 45, 60)), "0")
+        self.assertEqual([call.args[0].size for call in reader.call_args_list],
+                         [(31, 28), (21, 28)])
+        with patch("score_ocr.read_crop", return_value="3") as reader:
+            self.assertEqual(read_digit(image, (30, 40, 45, 60)), "3")
+        reader.assert_called_once()
 
     def test_sample_reads_only_score_region_when_configured(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -94,12 +94,50 @@ class PlayTests(unittest.TestCase):
             pulse.assert_not_called()
 
     def test_port_required_only_for_live_mode(self):
-        for argv in ([], ["--dry-run", "/dev/ttyUSB0"], ["--once", "/dev/ttyUSB0"],
+        for argv in (["--dry-run", "/dev/ttyUSB0"], ["--once", "/dev/ttyUSB0"],
                      ["--raw-ocr", "/dev/ttyUSB0"]):
             with self.subTest(argv=argv), redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit) as raised:
                     main(argv)
                 self.assertEqual(raised.exception.code, 2)
+
+    def test_monitor_discovery_without_ocr_or_serial(self):
+        class FakeCapture:
+            monitors = [{"left": 0, "top": 0, "width": 3840, "height": 1080},
+                        {"left": -1920, "top": 0, "width": 1920, "height": 1080},
+                        {"left": 0, "top": 0, "width": 1920, "height": 1080}]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                pass
+
+        fake_mss = types.SimpleNamespace(mss=FakeCapture)
+        for argv in (["--monitor"], ["--list-monitors", "-n"]):
+            with self.subTest(argv=argv), patch.dict(sys.modules, {"mss": fake_mss, "serial": None}):
+                with patch("play.sample") as sampled, redirect_stdout(io.StringIO()) as output:
+                    main(argv)
+                self.assertIn("1: 1920x1080 at (-1920, 0)", output.getvalue())
+                self.assertIn("2: 1920x1080 at (0, 0)", output.getvalue())
+                sampled.assert_not_called()
+
+    def test_port_discovery_without_opening_port(self):
+        ports = [types.SimpleNamespace(device="COM4", description="Arduino Uno"),
+                 types.SimpleNamespace(device="COM2", description="USB Serial")]
+        comports = types.SimpleNamespace(comports=lambda: ports)
+        fake_serial = types.ModuleType("serial")
+        fake_tools = types.ModuleType("serial.tools")
+        fake_tools.list_ports = comports
+        fake_serial.tools = fake_tools
+        modules = {"serial": fake_serial, "serial.tools": fake_tools,
+                   "serial.tools.list_ports": comports}
+        for argv in ([], ["--list-ports"], ["--list-ports", "-n"]):
+            with self.subTest(argv=argv), patch.dict(sys.modules, modules):
+                with patch("play.sample") as sampled, redirect_stdout(io.StringIO()) as output:
+                    main(argv)
+                self.assertIn("COM2: USB Serial\nCOM4: Arduino Uno", output.getvalue())
+                sampled.assert_not_called()
 
     def test_pulse_milliseconds_validation(self):
         self.assertEqual(pulse_milliseconds("2500"), 2500)
